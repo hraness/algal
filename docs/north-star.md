@@ -291,12 +291,13 @@ not its machine-wide identity or mandatory compression loop.
 
 ALGAL already has two distinct mechanisms: [exact agent-context snapshots](agent-context.md)
 with host-selected read grants, and application memory with admitted observations,
-current applicability checks, withdrawals, and archived selections. The next step
-is an optional multiresolution view, meaning different levels of detail over the
-same captured sources. It must reuse those mechanisms rather than replace them
-with a second memory store.
+current applicability checks, withdrawals, and archived selections. The optional
+[progressive reader](../spec/v1/context-history.md) adds different levels of detail
+over the same captured sources in Bun and Rust, with current-permission and
+source-availability checks. It does not replace those mechanisms with a second
+memory store or change existing runtime context by default.
 
-The proposed reading contract should provide:
+The reading contract provides:
 
 - a captured source head, explicit audience/selection, and logical event order;
 - protected task constraints and unresolved items, recent exact entries, older
@@ -306,16 +307,17 @@ The proposed reading contract should provide:
 - continuations tied to the source and summary generations, so concurrent appends
   or cache rebuilds cannot shift an earlier page;
 - explicit incomplete, unavailable, pending, and insufficient-budget outcomes;
-- source-preserving corrections and derivative invalidation without reviving
-  archived or withdrawn observations as current facts.
+- pending ranges after derivative invalidation, while historical originals remain
+  separate from current facts. Recorded correction and summary repair work is
+  the next implementation step.
 
 Source digests identify bytes, not permission. A summary is readable only when
 all contributing sources remain inside the reader's grant. A broad summary cannot
 be delegated to a narrower child by hiding its citations. Current authorization,
 source availability, and logical applicability remain separate checks.
 
-Summary creation is a cold-path agent effect, not a scheduler operation or a
-side effect of reading. Its job identity includes the source/child digests, scope,
+Summary creation is planned as a separate agent effect, not a scheduler
+operation or a side effect of reading. Its job identity includes the source/child digests, scope,
 policy, and summarizer configuration. Record its output and work in the existing
 process/effect machinery; replay reuses the recorded result. Queue depth, merge
 bursts, rebuild work, and aggregate inference all need limits. A missing summary
@@ -328,9 +330,10 @@ measure recursive-summary omissions against those originals. Reading allowance
 and storage retention are separate policies. Hierarchical views do not enlarge
 application memory, archive, context-snapshot, or process capacity limits.
 
-The first implementation is a local deterministic view with scripted summaries,
-Bun/Rust vectors, scoped exact reads, and a rollover/correction consumer fixture.
-It does not wait for the actor language, cloud habitat, or federation work. Oh can
+The deterministic foundation has scripted summaries, Bun/Rust vectors, scoped
+exact reads, and captured-prefix continuations. Recorded maintenance and the
+rollover/correction consumer fixture remain to be built. They do not wait for
+the actor language, cloud habitat, or federation work. Oh can
 adapt the reading rules over its own store without an ALGAL runtime dependency;
 xcb remains the provider/process owner, and Sponge remains the research-policy
 owner. Consumers adopt immutable artifacts independently.

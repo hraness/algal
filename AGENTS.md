@@ -197,6 +197,21 @@
   `bun scripts/agent-local-context-parity.ts` checks local-reader view limits,
   exact history after elision, rejected references, work limits, isolated tool
   cells, and identical receipts with replay in both runtimes.
+- The optional progressive history reader lives in `src/context-history.ts`
+  and `crates/algal/src/context_history.rs`; its contract and mandatory
+  current-permission join are sibling `context-history-contract` and
+  `context-history-access` modules. `cargo build --locked -p algal --bin algal
+  --example context_history_parity` followed by
+  `bun scripts/context-history-parity.ts` compares synthetic outputs,
+  bindings, refusal codes and counters. This is not live or semantic-quality
+  evidence. Keep the host registry and current-access resolver out of an
+  agent-facing interface.
+- On mixed Homebrew/rustup hosts, verify `cargo clippy --version` against
+  `rustc --version`. `rustup run` can still resolve Homebrew's external Cargo
+  subcommand. Prefix the check process with the selected rustup bin directory:
+  `PATH="$(dirname "$(rustup which cargo)"):$PATH" cargo clippy ...`. Keep
+  rustc, rustdoc, rustfmt and Clippy on that same toolchain; do not clean the
+  store or alter repository policies to repair an incompatible build cache.
 - The Foundation Models bridge comes from the pinned `apple-foundation`
   crate (`hraness/apple-foundation`); `sh scripts/build-apple.sh` emits its
   embedded source and builds it with Xcode 26 on Apple Silicon, and the

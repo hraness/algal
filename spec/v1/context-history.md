@@ -15,11 +15,19 @@ current-source-selection, and scope-revocation refusals.
 
 ## Status and limits
 
-Phase 1 supplies parsers, identity helpers, and pure cross-record and
-host-side refusal validation. It supplies no reader, selector, storage driver,
-permission registry, revocation engine, scheduler, inference, or summary
-publication operation. The host obligations below are required for a Phase 2
-reader, not enforcement performed by a Phase 1 parser.
+The contract modules supply parsers, identity helpers, and pure cross-record
+and host-side refusal validation. They supply no storage driver, permission
+registry, scheduler, inference, or summary publication operation. Selection
+and view-access helpers live in `src/context-history-access.ts` and
+`crates/algal/src/context_history_access.rs`.
+
+The optional reader lives in `src/context-history.ts` and
+`crates/algal/src/context_history.rs`. It keeps a per-principal permission
+registry and saved request/cursor bindings while reading the original store.
+Existing runtime context behavior does not change unless a host attaches it.
+It performs no summary maintenance, model call, source write, or derived-cache
+publication. The host obligations below still apply; serialized records
+cannot reconstruct current permission.
 
 Existing context records, capability classes, receipts, application schemas,
 and capacities are unchanged. Application memory keeps its 128 observation
@@ -408,6 +416,60 @@ access: digestCanonical(access), request}`. The resulting digest must equal
 `view.binding.selection`. Changed access revisions, grants, or saved requests
 therefore cannot reuse an earlier page binding. Hosts must resolve these inputs
 from their registry and owner policy; this pure join does not authenticate them.
+
+## Optional progressive reader
+
+`ContextHistoryHost` belongs to trusted host code. Its current-access resolver
+must authenticate the principal against the source owner's current policy.
+Only a bound TypeScript reader or individually scoped native operations belong
+in an agent-facing interface. Admission proves the captured originals and
+creates a host registry entry; a saved reference alone cannot create one.
+Re-admission of an existing history retains its published derivative generation;
+configured derivatives initialize a new catalog only. Host publication uses
+`useGeneration`, not re-admission.
+
+`inspect`, `read`, `slice`, `search`, `overview`, and `expand` each recheck
+current source selection. Reads check again after source fetches and refuse
+access-revision rollback, invalidated summaries, missing originals, and parent
+revocation. `slice` uses UTF-8 byte boundaries and preserves an initial BOM;
+`search` is a literal search of permitted original text. Summaries do not enter
+search results. Missing originals make `overview` return an unavailable page;
+point reads, expansion, search, and cached-page validation return `STORE_MISS`
+instead of a partial source body.
+
+The overview uses a pure aligned binary-range cover. Recent, protected, and
+host-selected relevant leaves keep original detail. Instructions are protected
+by default. A missing or invalidated summary is an expandable pending range.
+If the page cannot retain its protected instructions, it reports
+`protected-overflow` rather than dropping them. That task-constraint diagnostic
+has priority even when a read or work limit was the immediate stop. Output
+charging includes the escaped JSON frame and continuation; counters are
+deterministic work units, not tokens, provider billing, or elapsed time.
+Search conservatively charges node visits for its entire grant, even when its
+scan stops early; scanned bytes separately report the completed search scan.
+
+A saved read request contains the principal, recent/protected/relevance
+selection, digest of `{access, invalidated}`, generation digest, and limits.
+Its schema tag is `algal.context-history-read-request.v1`. The portable
+selection join binds its digest to the current grant and access record.
+Continuations must have been issued by this host, match that saved request,
+and begin at a cover boundary. Appends cannot remap the captured prefix; a
+changed generation, selection, or access state refuses the old continuation.
+
+Narrow same-principal delegation can read, search, and expand permitted source
+ranges. A whole-history overview or inspection also requires permission for
+all captured metadata. A different audience needs its own explicit capture.
+Cached page validation also fetches the snapshot and every displayed node's
+originals, within the saved read limits, and rechecks permission after fetches.
+A structurally valid cached body cannot survive missing source bytes.
+Grant, catalog, access-revision, saved-selection, and cursor registries each
+have the existing 256-entry host limit; revocation tombstones are not evicted.
+This reader is not a persistent journal or an unbounded history service.
+
+The development harness `scripts/context-history-parity.ts` compares synthetic
+outputs, refusal codes, bindings, counters, and range covers with the native
+`context_history_parity` example. It performs no inference. This checks
+mechanics, not whether summaries retain useful meaning or improve later work.
 
 ## Parser and validation API
 
