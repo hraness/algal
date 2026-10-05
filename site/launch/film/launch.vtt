@@ -1,37 +1,30 @@
 WEBVTT
 
-open
-00:00:00.000 --> 00:00:04.400
-A program can wait before it acts. Save the work, then resume when the decision arrives.
+act-1
+00:00:00.250 --> 00:00:04.152
+An agent that acts can act before you can stop it.
+You: Publish the report when it's ready.
+Agent: Done. I published it, and sent it twice after a restart.
 
-title
-00:00:04.400 --> 00:00:07.600
-ALGAL. Write agent programs that wait, resume, and replay.
+act-2
+00:00:04.452 --> 00:00:08.152
+ALGAL
+Agent programs that stop and wait for you.
 
-step-1
-00:00:07.600 --> 00:00:12.000
-Start. The demo program stops before it acts, with status waiting.
+act-3
+00:00:08.452 --> 00:00:15.380
+The program stops before it acts, and waits for your yes.
 
-step-2
-00:00:12.000 --> 00:00:16.400
-Decide. The report page names the one action. You approve or deny it.
+act-4
+00:00:15.680 --> 00:00:19.920
+A crash doesn't redo finished work or resend a write.
 
-step-3
-00:00:16.400 --> 00:00:20.800
-Crash. Killed twice on purpose. Finished steps are reused, and an uncertain write is not resent.
-
-step-4
-00:00:20.800 --> 00:00:24.700
-Verify. Export the run to one file and check its history offline.
-
-proof
-00:00:24.700 --> 00:00:29.200
-0 writes after you deny. 1 delivery of a finished step, crash or not. 1 send of an interrupted write, never repeated
-
-limits
-00:00:29.200 --> 00:00:33.200
-Runtime and host. Keep the local store to resume a run. Your app chooses the tools and permissions a program receives.
+act-5
+00:00:20.220 --> 00:00:26.622
+Check the whole run on another machine.
 
 end
-00:00:33.200 --> 00:00:37.700
-ALGAL. algal.computer. Free and open source.
+00:00:26.972 --> 00:00:32.900
+Ask your agent: “Install ALGAL from algal.computer”
+Preview · MIT licensed · No model account needed for the demo
+algal.computer

@@ -17,7 +17,7 @@ export function launchFilm(dir: string = FILM_DIR): ArticleVideoRecord | null {
   if (!FILM_FILES.every(file => existsSync(join(dir, file)))) return null;
   return {
     name: "Introducing ALGAL",
-    description: "ALGAL's built-in demo: a program stops for approval, survives two crashes without resending a write, and its history is checked offline.",
+    description: "A 33-second captioned film about ALGAL: an agent can act before you can stop it; an ALGAL program stops before it acts and waits for approval, survives crashes without redoing finished steps or resending a write, its whole run is checked on another machine, and it ends with asking your agent to install ALGAL.",
     sources: [
       { src: `${FILM_PATH}launch.webm`, type: "video/webm" },
       { src: `${FILM_PATH}launch.mp4`, type: "video/mp4" },
@@ -27,9 +27,9 @@ export function launchFilm(dir: string = FILM_DIR): ArticleVideoRecord | null {
     width: 1920,
     height: 1080,
     duration: FILM_DURATION,
-    uploadDate: "2026-10-01",
+    uploadDate: "2026-10-04",
   };
 }
 
-/** video/out/beats.json duration (37.7 s), rounded up. */
-export const FILM_DURATION = "PT38S" as const;
+/** video/story/build/timeline.json duration (32.9 s), rounded up. */
+export const FILM_DURATION = "PT33S" as const;

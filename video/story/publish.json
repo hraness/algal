@@ -1,0 +1,10 @@
+{
+  "copies": [
+    ["algal-launch-1080p.mp4", "../../site/launch/film/launch.mp4"],
+    ["algal-launch-1080p.webm", "../../site/launch/film/launch.webm"],
+    ["algal-launch-1x1.mp4", "../../site/launch/film/launch-1x1.mp4"],
+    ["algal-launch-9x16.mp4", "../../site/launch/film/launch-9x16.mp4"],
+    ["algal-launch-poster.jpg", "../../site/launch/film/launch-poster.jpg"],
+    ["algal-launch.en.vtt", "../../site/launch/film/launch.vtt"]
+  ]
+}
