@@ -24,6 +24,11 @@ pub struct ProviderSpec {
 
 pub fn spec(provider: &str) -> Result<ProviderSpec> {
     match provider {
+        "clef" => Ok(ProviderSpec {
+            env: "CLOUDFLARE_API_TOKEN",
+            service: "algal.clef",
+            account: "cloudflare",
+        }),
         "jev" => Ok(ProviderSpec {
             env: "TYPESAFE_API_KEY",
             service: "algal.jev",
@@ -507,6 +512,15 @@ pub fn resolve(provider: &str, explicit: Option<&str>) -> Result<Option<(String,
         check_shape(&key, "environment credential")?;
         return Ok(Some((key, "env")));
     }
+    if provider == "clef" {
+        if let Ok(key) = std::env::var("CLOUDFLARE_AUTH_TOKEN")
+            && !key.is_empty()
+        {
+            check_shape(&key, "environment credential")?;
+            return Ok(Some((key, "env")));
+        }
+        return Ok(None);
+    }
     if let Some(key) = vault_get(provider, &spec)? {
         check_shape(&key, "vault credential")?;
         return Ok(Some((key, "keychain")));
@@ -520,6 +534,11 @@ pub fn resolve(provider: &str, explicit: Option<&str>) -> Result<Option<(String,
 /// Store in the OS vault when the platform offers one, the
 /// permission-checked file otherwise. Returns `(source, location)`.
 pub fn store(provider: &str, key: &str) -> Result<(&'static str, String)> {
+    if provider == "clef" {
+        return Err(Error::invalid(
+            "Clef credentials are environment-only; set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID",
+        ));
+    }
     check_shape(key, &format!("{provider} credential"))?;
     let spec = spec(provider)?;
     if vault_detail().is_some() {
@@ -538,6 +557,11 @@ pub fn store(provider: &str, key: &str) -> Result<(&'static str, String)> {
 /// Remove the credential from every local store. Returns the sources that
 /// yielded a removal.
 pub fn forget(provider: &str) -> Result<Vec<&'static str>> {
+    if provider == "clef" {
+        return Err(Error::invalid(
+            "Clef credentials are environment-only; remove the token from your environment",
+        ));
+    }
     let spec = spec(provider)?;
     let mut removed = Vec::new();
     if vault_forget(provider, &spec)? {

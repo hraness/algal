@@ -34,7 +34,7 @@ Store and share
   manifests                       List saved programs
 
 Setup
-  auth jev                        Save a TypeSafe Jev key on this computer
+  auth clef --status              Check environment-only Cloudflare credentials
   doctor                          Check that ALGAL is ready
   update                          Show this Bun runtime's manual update workflow
 

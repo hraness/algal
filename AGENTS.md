@@ -19,8 +19,8 @@
   tools (`tools.ts`), opaque capability handles (`capabilities.ts`) and the
   bounded durable mailbox driver (`mailbox.ts`), the named durable process
   supervisor (`process.ts`), the provider-neutral
-  typed-decision layer (`decisions.ts`) with the TypeSafe Jev adapter
-  (`jev.ts`), cross-platform
+  typed-decision layer (`decisions.ts`) with the Cloudflare Clef adapter
+  (`clef.ts`, native `clef.rs`) and explicit legacy Jev adapter (`jev.ts`), cross-platform
   credential custody (`credentials.ts`), embeddings (`embeddings.ts`) and
   the derived semantic index plus recall executor (`semantic.ts`), foundry
   evaluation and search (`foundry.ts`, `search.ts`) with the habitat-wide

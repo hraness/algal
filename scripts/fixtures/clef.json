@@ -1,0 +1,51 @@
+{
+  "accountId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "questions": {
+    "keep": { "type": "noul", "instructions": "Keep the observation?" },
+    "label": { "type": "choice", "instructions": "Choose a label.", "criteria": { "a": null, "b": "Other" } },
+    "severity": { "type": "score", "instructions": "How severe is the customer impact?", "criteria": ["No impact", "Minor", "Major", "Critical"] }
+  },
+  "images": [
+    { "content_type": "image/png", "base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j1ioAAAAASUVORK5CYII=" },
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j1ioAAAAASUVORK5CYII=",
+    { "content_type": "image/webp", "base64": "UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA" },
+    { "content_type": "image/jpeg", "base64": "/9j/wAALCAABAAEBAREA/9oACAEBAAA/AAH/2Q==" }
+  ],
+  "response": {
+    "success": true,
+    "errors": [],
+    "messages": [],
+    "result": {
+      "model": "clef",
+      "usage": { "input_tokens": 319, "output_tokens": 0 },
+      "answers": {
+        "keep": { "type": "noul", "noul": 0.8 },
+        "label": { "type": "choice", "choice": "a", "confidence": 0.75, "probabilities": { "a": 0.75, "b": 0.25 } },
+        "severity": { "type": "score", "score": 2.931, "confidence": 0.8612, "probabilities": { "0": 0.0047, "1": 0.0051, "2": 0.0448, "3": 0.9454 }, "legend": { "0": "No impact", "1": "Minor", "2": "Major", "3": "Critical" } }
+      }
+    }
+  },
+  "cases": [
+    { "name": "text", "model": "clef", "source": "none", "imageIndices": [], "patch": {} },
+    { "name": "configured-png", "model": "clef", "source": "configured", "imageIndices": [0], "patch": {} },
+    { "name": "direct-png", "model": "clef", "source": "request", "imageIndices": [0], "patch": {} },
+    { "name": "configured-data-url", "model": "clef", "source": "configured", "imageIndices": [1], "patch": {} },
+    { "name": "flash-all-formats", "model": "clef-flash", "source": "configured", "imageIndices": [0, 1, 2, 3], "patch": { "/result/model": "clef-flash", "/result/answers/severity/score": 2.7378, "/result/answers/severity/confidence": 0.5316, "/result/answers/severity/probabilities": { "0": 0.0149, "1": 0.0157, "2": 0.186, "3": 0.7834 } } },
+    { "name": "feasible-three-decimal-choice", "model": "clef", "source": "none", "imageIndices": [], "patch": { "/result/answers/label/probabilities": { "a": 0.75, "b": 0.249 } } },
+    { "name": "inconsistent-score", "model": "clef", "source": "none", "imageIndices": [], "patch": { "/result/answers/severity/score": 2.921 }, "error": "EFFECT_UNPARSEABLE" },
+    { "name": "infeasible-probabilities", "model": "clef", "source": "none", "imageIndices": [], "patch": { "/result/answers/label/probabilities": { "a": 0.7, "b": 0.2 } }, "error": "EFFECT_UNPARSEABLE" },
+    { "name": "wrong-legend", "model": "clef", "source": "none", "imageIndices": [], "patch": { "/result/answers/severity/legend/0": "PRIVATE" }, "error": "EFFECT_UNPARSEABLE" },
+    { "name": "wrong-model", "model": "clef", "source": "none", "imageIndices": [], "patch": { "/result/model": "clef-flash" }, "error": "EFFECT_UNPARSEABLE" },
+    { "name": "failed-envelope", "model": "clef", "source": "none", "imageIndices": [], "patch": { "/success": false, "/errors": [{ "message": "PRIVATE" }] }, "error": "EFFECT_UNPARSEABLE" },
+    { "name": "unknown-answer", "model": "clef", "source": "none", "imageIndices": [], "patch": { "/result/answers/extra": { "type": "noul", "noul": 0.5 } }, "error": "EFFECT_UNPARSEABLE" },
+    { "name": "negative-usage", "model": "clef", "source": "none", "imageIndices": [], "patch": { "/result/usage/input_tokens": -1 }, "error": "EFFECT_UNPARSEABLE" }
+  ],
+  "invalidImages": [
+    ["https://example.com/private.png"],
+    [{ "content_type": "image/png", "base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwC" }],
+    [{ "content_type": "image/jpeg", "base64": "/9j/wAAICAABAAEB/9k=" }],
+    [{ "content_type": "image/webp", "base64": "UklGRhYAAABXRUJQVlA4WAoAAAAAAAAAAAAAAAAA" }],
+    [{ "content_type": "image/png", "base64": "AB==" }],
+    [{ "content_type": "image/svg+xml", "base64": "AAAA" }]
+  ]
+}

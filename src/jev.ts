@@ -115,7 +115,9 @@ export function jevAsker(options: JevAskerOptions): DecisionAsker {
       state: DecisionState,
       questions: DecisionQuestions,
       signal?: AbortSignal,
+      images?: unknown,
     ): Promise<DecisionResponse> {
+      if (images !== undefined) throw new AlgalError("PARSE_FAILED", "Legacy Jev does not support embedded images; use Clef");
       if (signal?.aborted) throw new AlgalError("BUDGET_EXHAUSTED", "Jev request cancelled before dispatch");
       const token = await key();
       if (signal?.aborted) throw new AlgalError("BUDGET_EXHAUSTED", "Jev request cancelled before dispatch");

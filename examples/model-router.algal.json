@@ -2,7 +2,7 @@
   "contract": "algal.organism.v1",
   "key": "organism:model-router",
   "name": "Model router",
-  "note": "Fast frontier-vs-standard router for first-session task prompts. One expr cell computes deterministic shape features (word count, imperative open, resume/takeover markers, action-verb density); one bounded decide call asks a typed-decision provider (Jev) for difficulty, scope, ambiguity, stakes, kind, and a frontier-worthiness probability; a second expr cell applies the fitted linear head and kind gates. Generation 1 coefficients: a prior-anchored logistic update of the September 22 head (306 prompts) on 84 first prompts from September 2026, the window in which the frontier choice existed (see docs/model-router.md); every feature is task-intrinsic, not operator identity. Route output: frontier | standard.",
+  "note": "Fast frontier-vs-standard router for first-session task prompts. One expr cell computes deterministic shape features (word count, imperative open, resume/takeover markers, action-verb density); one bounded decide call asks a host-selected typed-decision provider for difficulty, scope, ambiguity, stakes, kind, and a frontier-worthiness probability; a second expr cell applies the fitted linear head and kind gates. Generation 1 coefficients: a prior-anchored logistic update of the September 22 head (306 prompts) on 84 first prompts from September 2026, the window in which the frontier choice existed (see docs/model-router.md); every feature is task-intrinsic, not operator identity. The fitted weights and measured results are historical Jev results, not evaluated on Clef. Route output: frontier | standard.",
   "budgets": {
     "maxSteps": 16,
     "maxAgentCalls": 1,

@@ -47,6 +47,7 @@
     "./store-memory": "./src/store-memory.ts",
     "./verify": "./src/verify.ts",
     "./decisions": "./src/decisions.ts",
+    "./clef": "./src/clef.ts",
     "./effects": "./src/effects.ts",
     "./digest": "./src/digest.ts",
     "./values": "./src/values.ts",

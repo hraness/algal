@@ -15,7 +15,7 @@ import { homedir, platform } from "node:os";
 import { join } from "node:path";
 import { AlgalError } from "./errors";
 
-export type CredentialProvider = "jev";
+export type CredentialProvider = "clef" | "jev";
 
 export type CredentialSource =
   | "option"
@@ -42,6 +42,7 @@ type ProviderSpec = {
 };
 
 const PROVIDERS: Record<CredentialProvider, ProviderSpec> = {
+  clef: { env: "CLOUDFLARE_API_TOKEN", service: "algal.clef", account: "cloudflare" },
   jev: { env: "TYPESAFE_API_KEY", service: "algal.jev", account: "typesafe" },
 };
 
@@ -364,11 +365,12 @@ export async function resolveCredential(
     return { key: options.credential, source: "option" };
   }
   const envName = options.env ?? PROVIDERS[provider].env;
-  const envValue = process.env[envName];
+  const envValue = process.env[envName] || (provider === "clef" && options.env === undefined ? process.env.CLOUDFLARE_AUTH_TOKEN : undefined);
   if (typeof envValue === "string" && envValue.length > 0) {
     checkCredentialShape(envValue, `${provider} environment credential`);
     return { key: envValue, source: "env" };
   }
+  if (provider === "clef") return undefined;
   const run = options.run ?? defaultRun;
   const backend = osBackend(provider);
   if (backend) {
@@ -404,6 +406,7 @@ export async function storeCredential(
   key: string,
   options: { run?: CommandRunner } = {},
 ): Promise<{ source: CredentialSource; location: string }> {
+  if (provider === "clef") throw new AlgalError("PARSE_FAILED", "Clef credentials are environment-only; set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID");
   checkCredentialShape(key, `${provider} credential`);
   const run = options.run ?? defaultRun;
   const backend = osBackend(provider);
@@ -425,6 +428,7 @@ export async function forgetCredential(
   provider: CredentialProvider,
   options: { run?: CommandRunner } = {},
 ): Promise<{ removed: CredentialSource[] }> {
+  if (provider === "clef") throw new AlgalError("PARSE_FAILED", "Clef credentials are environment-only; remove the token from your environment");
   const removed: CredentialSource[] = [];
   const run = options.run ?? defaultRun;
   const backend = osBackend(provider);

@@ -396,10 +396,10 @@ A runtime that knows only version 2 rejects `schemaVersion: 3` with
       "instructions": "Pick the closest lane.",
       "criteria": { "bug": null, "feature": null, "chore": null }
     },
-    "risk": { "type": "score", "instructions": "Rate breakage risk." }
+    "risk": { "type": "score", "instructions": "Rate breakage risk.", "criteria": ["Low", "High"] }
   },
   "view": { "inputs": "*" },
-  "route": { "provider": "jev" },
+  "route": { "provider": "clef" },
   "budget": { "maxContextBytes": 65536 },
   "retry": { "attempts": 2 }
 }
@@ -410,9 +410,11 @@ A `decide` cell declares a bounded question map (≤ 64 names, each
 `criteria`). It declares **no** output contract — the contract is derived
 from the question map, an `{"answers": {<name>: <answer-by-type>}}` record:
 
-- `noul` answers `{noul: number}` — a keep/relevance probability.
-- `choice` answers `{choice: "<criterion>", confidence, probabilities}`.
-- `score` answers `{score: number, confidence, probabilities}`.
+- `noul` answers `{type:"noul", noul: number}`, a keep/relevance probability.
+- `choice` answers `{type:"choice", choice: "<criterion>", confidence, probabilities}`.
+- `score` answers `{type:"score", score: number, confidence, probabilities, legend?}`.
+  Clef requires and preserves a legend mapping zero-based level indices to
+  the declared criteria; its score is on 0..(number of levels − 1).
 
 The cell activates like an agent with one turn and no tools: the effect
 request carries `questions` alongside `context`, and a *decision provider*
@@ -425,6 +427,47 @@ reject `agent` and `gate` requests — approval stays human/policy-routed.
 `classifier` cells are the model-served single-choice equivalent: a
 decision provider serves them by synthesizing one `choice` question from
 the declared labels.
+
+Cloudflare Clef is an opt-in decision backend (`--clef`, or native
+`kind:"clef"`). It defaults to model `clef`; `clef-flash` is also supported.
+The CLIs resolve the account ID from `CLOUDFLARE_ACCOUNT_ID` and the bearer
+token from `CLOUDFLARE_API_TOKEN` or `CLOUDFLARE_AUTH_TOKEN`, without a local
+credential vault. Library hosts may provide an in-memory credential.
+Requests use the fixed Cloudflare account/model REST URL with redirects
+forbidden. Responses must use a successful REST envelope, match the model
+and question IDs, and provide probabilities and confidence in 0..1,
+matching score legends, and nonnegative token counts. Each probability has
+a clipped ±0.0005 interval for three-decimal rounding. Those intervals must
+contain a distribution summing to 1; a score's ±0.0005 interval must also
+intersect the achievable weighted mean of that same distribution. Reported
+values are preserved, not renormalized. Score legends are saved with
+the decision output. Clef question IDs match `[A-Za-z0-9_.-]{1,100}`;
+instructions must be nonempty, choices require 2..32 options and scores
+require 2..10 levels. ALGAL rejects oversized state or question evidence
+instead of truncating it; the provider's context limits also apply.
+
+Ordinary manifest runs receive only host-configured images, through
+`--clef --images <file>`, the TypeScript executor's `images` option, or the
+native Clef backend's `images` field. There is no manifest image field or
+implicit file/source-code attachment. TypeScript `EffectRequest.images`
+and native `clef::prepare` accept images only for direct low-level adapter
+calls; they are not an image hook in the scheduler. Only one image source
+is accepted, and TypeScript rejects a custom `asker` with configured images.
+
+The array accepts embedded PNG/JPEG/WebP data URLs or
+`{content_type,base64}` objects. It is limited to 4 images, 4 MiB each and
+8 MiB total after base64 decoding into file bytes, 16 megapixels each, and
+a 13 MiB JSON file/request body. Native `algal.host.v1` files keep their
+separate 1 MiB limit for the entire configuration, including inline base64;
+`--clef --images` supports the larger image budget without changing that
+host limit. Remote URLs, invalid MIME/base64, missing image payloads,
+truncated containers and exceeded limits fail before credential resolution
+or provider access. Container structure and dimensions are checked, but
+pixel streams and PNG checksums are not decoded or verified. These checks
+do not guarantee a decodable image payload. Direct effect-request images
+participate in the request digest; executor-configured images participate
+in the configuration/cache identity. Credentials never participate in
+those identities. Explicit legacy Jev adapters reject images.
 
 `budget.maxTurns` is fixed at 1 for `decide`; other budget fields, `view`,
 `route`, and `retry` behave as on agent cells.
@@ -443,7 +486,7 @@ the declared labels.
   "k": 8,
   "embedder": "local",
   "route": { "provider": "recall" },
-  "rerank": { "route": { "provider": "jev" }, "take": 4 },
+  "rerank": { "route": { "provider": "clef" }, "take": 4 },
   "budget": { "maxContextBytes": 65536, "maxOutputBytes": 65536 },
   "retry": { "attempts": 2 }
 }

@@ -69,6 +69,14 @@ async function jevSpecExecutor(spec: string): Promise<Executor | undefined> {
   });
 }
 
+async function clefSpecExecutor(spec: string, images?: import("./src/clef").ClefImage[]): Promise<Executor | undefined> {
+  if (spec !== "clef" && !spec.startsWith("clef:")) return undefined;
+  const { clefExecutor } = await import("./src/clef");
+  const model = spec === "clef" ? "clef" : spec.slice(5);
+  if (model !== "clef" && model !== "clef-flash") usageError("Clef model must be clef or clef-flash");
+  return clefExecutor({ model, ...(images !== undefined ? { images } : {}) });
+}
+
 async function recallSpecExecutor(spec: string, dir: string): Promise<Executor | undefined> {
   if (spec !== "recall" && !spec.startsWith("recall:")) return undefined;
   const embedderSpec = spec === "recall" ? "local" : spec.slice(7);
@@ -183,7 +191,12 @@ usage:
       --base-url <url> --model <model>         OpenAI-compatible endpoint (HTTPS or loopback HTTP)
       --credential-env <name>                 endpoint credential environment variable (optional)
       --response-format <format>              json_schema (default), json_object, or prompt
-      --jev [model]                           TypeSafe Jev decision executor — serves
+      --clef [clef|clef-flash]                 Cloudflare Clef decision executor (paid, opt-in)
+                                                set CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN
+                                                (CLOUDFLARE_AUTH_TOKEN is also accepted)
+      --images <file>                         JSON array of embedded PNG/JPEG/WebP images;
+                                                requires --clef; max 4, 4 MiB each, 8 MiB total
+      --jev [model]                           Legacy TypeSafe Jev decision executor — serves
                                                 decide and classifier cells (never gates:
                                                 approvals stay host/policy-routed)
       --recall [embedder]                     derived-index recall executor; embedder is
@@ -379,7 +392,7 @@ usage:
                                               returns only declared interface outputs.
                                               options mirror algal run: --args, --responses,
                                               --executor-cmd, --executor-profile, --gateway-model,
-                                              --jev, --recall,
+                                              --clef, --images, --jev, --recall,
                                               --executors, --modules, --tools, --cache-effects, --dir
   algal tool-def <manifest.json> [--modules <dir>]
                                               print an OpenAI/Anthropic tool definition for the
@@ -402,11 +415,13 @@ usage:
                                               receipts-touching-capability <class>,
                                               unevaluated-revisions, largest-work,
                                               process-status, kinds
+  algal auth clef --status                    check environment-only Cloudflare credentials
   algal auth jev [--status | --forget | --stdin | --clipboard]
                                               vault a provider credential locally — keychain
                                               when available, permission-checked file otherwise;
                                               never echoes the key
-  algal doctor [--jev]                        runtime and provider availability check
+  algal doctor [--clef]                       runtime and Cloudflare configuration check (no API call)
+  algal doctor --jev                          legacy Jev live connectivity check
   algal --version | --help
 
 Source diagnostics (all commands that load .algal files):
@@ -857,7 +872,7 @@ async function resolveExecutors(
     usageError("--base-url and --model must be supplied together");
   if (baseUrl === undefined && (credentialEnv !== undefined || responseFormat !== undefined))
     usageError("--credential-env and --response-format require --base-url and --model");
-  if (baseUrl !== undefined && ["responses", "executor-cmd", "gateway-model", "jev", "recall"].some(key => flags[key] !== undefined))
+  if (baseUrl !== undefined && ["responses", "executor-cmd", "gateway-model", "clef", "jev", "recall"].some(key => flags[key] !== undefined))
     usageError("choose one default executor; --base-url cannot be combined with another provider");
   if (responseFormat !== undefined && !["json_schema", "json_object", "prompt"].includes(responseFormat))
     usageError("--response-format must be json_schema, json_object, or prompt");
@@ -903,6 +918,14 @@ async function resolveExecutors(
     const { vercelGatewayExecutor } = await import("./src/gateway");
     executors.push(vercelGatewayExecutor({ model }));
   }
+  if (flags.images !== undefined && flags.clef === undefined) usageError("--images requires --clef");
+  if (flags.clef !== undefined) {
+    if (["responses", "executor-cmd", "gateway-model", "jev", "recall"].some(key => flags[key] !== undefined)) usageError("choose one default executor; --clef cannot be combined with another provider");
+    const { validateClefImages, CLEF_IMAGE_LIMITS } = await import("./src/clef");
+    const imageFile = artifactFlag(flags, "images");
+    const images = imageFile !== undefined ? validateClefImages(await readJsonBounded(imageFile, CLEF_IMAGE_LIMITS.maxBodyBytes, "Clef images")) : undefined;
+    executors.push((await clefSpecExecutor(typeof flags.clef === "string" ? `clef:${flags.clef}` : "clef", images))!);
+  }
   if (flags.jev !== undefined) {
     executors.push((await jevSpecExecutor(typeof flags.jev === "string" ? `jev:${flags.jev}` : "jev"))!);
   }
@@ -922,6 +945,8 @@ async function resolveExecutors(
           `executors.${name} must be a shell command string`,
         );
       }
+      const clef = await clefSpecExecutor(cmd);
+      if (clef !== undefined) { executors.push(named(name, clef)); continue; }
       const jev = await jevSpecExecutor(cmd);
       if (jev !== undefined) {
         executors.push(named(name, jev));
@@ -2787,6 +2812,8 @@ async function main(): Promise<number> {
           const { vercelGatewayExecutor } = await import("./src/gateway");
           return named(id, vercelGatewayExecutor({ model: spec.slice("gateway:".length) }));
         }
+        const clef = await clefSpecExecutor(spec);
+        if (clef !== undefined) return named(id, clef);
         const jev = await jevSpecExecutor(spec);
         if (jev !== undefined) return named(id, jev);
         const recall = await recallSpecExecutor(spec, dir);
@@ -2807,7 +2834,7 @@ async function main(): Promise<number> {
         }
         throw new AlgalError(
           "PARSE_FAILED",
-          `bench executor "${id}": unknown spec (want gateway:<model>, jev[:<model>], recall[:<embedder>], scripted:<file>, or cmd:<command>)`,
+          `bench executor "${id}": unknown spec (want gateway:<model>, clef[:<model>], jev[:<model>], recall[:<embedder>], scripted:<file>, or cmd:<command>)`,
         );
       };
       const systems: BenchSystem[] = [];
@@ -3731,7 +3758,8 @@ async function main(): Promise<number> {
 
     case "auth": {
       const provider = positional[0];
-      if (provider !== "jev") usageError("algal auth <jev> [--status|--forget|--stdin|--clipboard]");
+      if (provider !== "jev" && provider !== "clef") usageError("algal auth clef --status or algal auth jev [--status|--forget|--stdin|--clipboard]");
+      if (provider === "clef" && flags.status === undefined) usageError("Clef credentials are environment-only; set CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN (CLOUDFLARE_AUTH_TOKEN is also accepted)");
       const { credentialStatus, forgetCredential, providerSpec, storeCredential } = await import("./src/credentials");
       if (flags.status !== undefined) {
         out((await credentialStatus(provider)) as unknown as JsonObject);
@@ -3769,6 +3797,16 @@ async function main(): Promise<number> {
     }
 
     case "doctor": {
+      if (flags.clef !== undefined) {
+        const { credentialStatus } = await import("./src/credentials");
+        const { clefEndpoint } = await import("./src/clef");
+        const credential = await credentialStatus("clef");
+        let accountConfigured = false;
+        try { clefEndpoint(process.env.CLOUDFLARE_ACCOUNT_ID ?? ""); accountConfigured = true; } catch { accountConfigured = false; }
+        const configured = accountConfigured && credential.configured;
+        out({ provider: "clef", configured, accountConfigured, credential: credential as unknown as JsonValue, liveChecked: false });
+        return configured ? 0 : 1;
+      }
       if (flags.jev !== undefined) {
         const { credentialResolver, credentialStatus, providerSpec } = await import("./src/credentials");
         const { jevAsker } = await import("./src/jev");
@@ -3809,12 +3847,12 @@ async function main(): Promise<number> {
         }
       }
       if (humanReport(process.argv.slice(2))) {
-        const jevEnv = process.env.TYPESAFE_API_KEY !== undefined && process.env.TYPESAFE_API_KEY !== "";
+        const clefEnv = Boolean(process.env.CLOUDFLARE_API_TOKEN || process.env.CLOUDFLARE_AUTH_TOKEN);
         printDoctor([
           ["ok", `ALGAL ${PACKAGE_VERSION} is ready (Bun reference runtime on ${platformName()}).`],
-          jevEnv
-            ? ["ok", "Jev key found in TYPESAFE_API_KEY. Test it: algal doctor --jev"]
-            : ["skip", "Jev decisions: not checked. Test a saved key: algal doctor --jev"],
+          clefEnv
+            ? ["ok", "Cloudflare token found. Check configuration: algal doctor --clef"]
+            : ["skip", "Clef decisions: not configured. Set CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN."],
         ], undefined, "algal examples");
         return 0;
       }

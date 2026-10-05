@@ -33,6 +33,13 @@ fn jev_model_default() -> String {
     crate::decisions::DEFAULT_MODEL.to_owned()
 }
 
+fn clef_model_default() -> String {
+    crate::clef::DEFAULT_MODEL.to_owned()
+}
+fn clef_account_default() -> String {
+    std::env::var("CLOUDFLARE_ACCOUNT_ID").unwrap_or_default()
+}
+
 fn recall_embedder_default() -> String {
     "local".to_owned()
 }
@@ -65,6 +72,14 @@ pub enum Backend {
         model: String,
         #[serde(default)]
         credential_env: Option<String>,
+    },
+    Clef {
+        #[serde(default = "clef_model_default")]
+        model: String,
+        #[serde(default = "clef_account_default")]
+        account_id: String,
+        #[serde(default)]
+        images: Option<Value>,
     },
     Recall {
         dir: PathBuf,
@@ -118,7 +133,7 @@ impl Backend {
             Self::Gateway { .. } | Self::Openai { .. } | Self::Apple { .. } => {
                 matches!(kind, "agent" | "classifier")
             }
-            Self::Jev { .. } => matches!(kind, "classifier" | "decide"),
+            Self::Jev { .. } | Self::Clef { .. } => matches!(kind, "classifier" | "decide"),
             Self::Recall { .. } => kind == "recall",
             Self::Acp { .. } | Self::Xcb { .. } => kind == "agent",
         }
@@ -150,6 +165,11 @@ impl Backend {
             Self::Scripted { responses } => {
                 digest(&json!({"kind":"scripted","id":id,"responses":responses}))
             }
+            Self::Clef {
+                model,
+                account_id,
+                images,
+            } => crate::clef::cache_identity(account_id, model, images.as_ref()),
             _ => Ok(id.to_owned()),
         }
     }
@@ -171,6 +191,16 @@ impl Backend {
                 check_model(model)?;
                 if let Some(env) = credential_env {
                     check_env(env)?;
+                }
+            }
+            Self::Clef {
+                model,
+                account_id,
+                images,
+            } => {
+                crate::clef::endpoint(account_id, model)?;
+                if let Some(images) = images {
+                    crate::clef::check_images(images)?;
                 }
             }
             Self::Recall { dir, embedder } => {
@@ -1102,6 +1132,29 @@ impl Host {
                 }
                 meta["executor"] = json!(crate::decisions::executor_id(&model));
                 Ok((out, meta))
+            }
+            Backend::Clef {
+                model,
+                account_id,
+                images,
+            } => {
+                let (body, single) = crate::clef::prepare(model, request, images.as_ref())?;
+                let credential = crate::credentials::resolve("clef", None)?
+                    .ok_or_else(|| {
+                        Error::new(
+                            "EFFECT_UNBOUND",
+                            "Set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID for Clef",
+                        )
+                    })?
+                    .0;
+                let (out, mut meta) =
+                    crate::clef::ask(account_id, &credential, &body, deadline).await?;
+                meta["executor"] = json!(crate::clef::executor_id(model));
+                if single {
+                    Ok((out["answers"]["answer"]["choice"].clone(), meta))
+                } else {
+                    Ok((out, meta))
+                }
             }
             Backend::Recall { dir, embedder } => {
                 if request["kind"] != "recall" || !request["recall"].is_object() {

@@ -4,12 +4,17 @@
 `frontier` or `standard`: the binary capability tier a coding-agent model
 picker decides at session start. It is small, fast, and replayable: two
 `expr` cells compute deterministic shape features and the routing score;
-one `decide` cell asks a typed-decision provider (Jev) for six scores.
+one `decide` cell asks a host-selected decision provider for six scores.
+The manifest is provider-neutral; Cloudflare Clef is the recommended
+adapter for new runs. Hosted execution is paid and opt-in; set
+`CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` before
+using `--clef`. The default model is `clef`; `--clef clef-flash` selects the
+other supported model.
 
 ```sh
 bun cli.ts run examples/model-router.algal.json \
-  --args '{"src":{"task":"migrate the session store and update every caller"}}' \
-  --jev
+  --args examples/model-router.args.json \
+  --clef
 ```
 
 Output: `{"route": "frontier"|"standard", "score": <logit × 1000>,
@@ -49,6 +54,10 @@ observed operator never routed a pure question to a frontier model, and a
 capability probe does not need one.
 
 ## Provenance and limits
+
+The fitted head uses historical Jev scores. The weights and measured results
+below have not been evaluated with Clef; selecting Clef does not establish
+the same routing quality.
 
 The head has two generations, both fit on one operator's local Codex,
 Claude Code, and Devin CLI stores and labeled by the model that
@@ -100,13 +109,15 @@ generations are published at hraness.com/prompting/data.json.
 
 ## Cost and speed
 
-One routing decision costs one bounded `decide` call (~1k tokens in,
-~0.2k out with `jev-latest`) plus two fueled `expr` evaluations — no
-agent cell, no generated text. All six questions ride in a single ask.
+One routing decision uses one `decide` call plus two fueled `expr`
+evaluations, with no agent cell or generated text. All six questions ride in
+a single request. Historical `jev-latest` runs used about 1k input tokens and
+0.2k output tokens per decision. Clef cost and latency have not been measured
+for this example.
 
 ## Reuse
 
-Any typed-decision executor can serve the `decide` cell — `--jev`,
+Any typed-decision executor can serve the `decide` cell, including `--clef`,
 `--executor-cmd`, or a `route`/`preset` executor. Retrain the head by
 re-fitting the nine weights on a new labeled sample and editing the
 `combine` program; the cell boundaries do not change.

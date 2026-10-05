@@ -236,6 +236,8 @@ export {
   jevExecutor,
 } from "./src/jev";
 export type { JevAskerOptions, JevExecutorOptions } from "./src/jev";
+export { CLEF_DEFAULT_MODEL, CLEF_MODELS, CLEF_IMAGE_LIMITS, clefAsker, clefExecutor, clefEndpoint, clefRequest, parseClefResponse, validateClefImages } from "./src/clef";
+export type { ClefModel, ClefImage, ClefAskerOptions, ClefExecutorOptions } from "./src/clef";
 
 export {
   algalHome,
