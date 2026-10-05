@@ -96,5 +96,5 @@ Rust expression evaluator runs as WebAssembly. A secure browser context and
 those storage APIs are required. The browser renderer and application checks
 remain trusted software; the editable workflow cannot replace them.
 
-See [local triage](local-triage.md) for the same task model in a local Bun host,
-Dioxus desktop interface, and Ratatui terminal interface.
+See [local triage](local-triage.md) for the same task model in a local Bun host
+and its served browser workspace.

@@ -38,11 +38,8 @@
     "site/tasks-render.ts",
     "site/browser-inference.ts",
     "site/browser-inference-worker.ts",
-    "examples/malleable-site/renderers/target",
-    "examples/malleable-site/renderers/dist",
     "dist",
     ".algal",
-    "examples/local-triage/renderers/target",
     "examples/local-triage/dist"
   ]
 }

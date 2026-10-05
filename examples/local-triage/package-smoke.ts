@@ -35,9 +35,9 @@ try {
   const types = await command(["/usr/bin/tar", "-tvzf", resolve(archive)]);
   assert(types.trim().split("\n").every(line => line.startsWith("-") || line.startsWith("d")), "Archive contains only regular files/directories");
   await command(["/usr/bin/tar", "-xzf", resolve(archive), "-C", temporary]);
-  const manifest = JSON.parse(await readFile(join(root, "manifest.json"), "utf8")) as { contract: string; files: { path: string; bytes: number; sha256: string }[]; provenance: { gitHead: string; gitWorktreeDirty: boolean; bunVersion: string; rustcVersion: string; source: { sha256: string; files: unknown[] } } };
+  const manifest = JSON.parse(await readFile(join(root, "manifest.json"), "utf8")) as { contract: string; files: { path: string; bytes: number; sha256: string }[]; provenance: { gitHead: string; gitWorktreeDirty: boolean; bunVersion: string; source: { sha256: string; files: unknown[] } } };
   assert(manifest.contract === "algal.triage-package.v1", "Package manifest contract matches");
-  assert(/^[a-f0-9]{40,64}$/.test(manifest.provenance.gitHead) && typeof manifest.provenance.gitWorktreeDirty === "boolean" && !!manifest.provenance.bunVersion && !!manifest.provenance.rustcVersion && manifest.provenance.source.files.length > 0 && createHash("sha256").update(JSON.stringify(manifest.provenance.source.files)).digest("hex") === manifest.provenance.source.sha256, "Retained source identity and toolchain provenance match manifest");
+  assert(/^[a-f0-9]{40,64}$/.test(manifest.provenance.gitHead) && typeof manifest.provenance.gitWorktreeDirty === "boolean" && !!manifest.provenance.bunVersion && manifest.provenance.source.files.length > 0 && createHash("sha256").update(JSON.stringify(manifest.provenance.source.files)).digest("hex") === manifest.provenance.source.sha256, "Retained source identity and toolchain provenance match manifest");
   for (const file of manifest.files) { const bytes = await readFile(join(root, file.path)); assert(bytes.length === file.bytes && createHash("sha256").update(bytes).digest("hex") === file.sha256, `Exact packaged bytes: ${file.path}`); }
   for (const file of manifest.files.filter(item => item.path.startsWith("bin/") || item.path.includes("/Resources/bin/") || item.path.includes("/MacOS/"))) {
     const dependencies = (await command(["/usr/bin/otool", "-L", join(root, file.path)])).trim().split("\n").slice(1).map(line => line.trim().split(" (", 1)[0]!);
@@ -66,8 +66,6 @@ try {
   assert((await host<{ ok: boolean }>("verify", transfer)).ok, "Extracted package replays exported migration evidence");
   const forked = await host<Capture>("fork", undefined, [file, "forked"]);
   assert(forked.application === "forked" && forked.tasks.length === 1, "Extracted package forks into new authority-free identity");
-  const tui = await command([join(root, "bin/triage-tui"), "--dir", state, "--application", "smoke", "--snapshot"]);
-  assert(tui.includes("Extracted app task") && tui.includes("Keep this draft"), "Extracted TUI renders actual retained tasks and stale draft");
   const server = Bun.spawn([join(root, "bin/triage-host"), state, "smoke", "serve"], { cwd: empty, env: { PATH: "/usr/bin:/bin", LANG: "en_US.UTF-8" }, stdin: "ignore", stdout: "pipe", stderr: "ignore" });
   const serverTimer = setTimeout(() => server.kill("SIGKILL"), 30000);
   const reader = server.stdout.getReader();
@@ -84,8 +82,6 @@ try {
     assert(opened.status === 200 && body.capture.head === capture.head && body.capture.tasks[0]?.title === "Extracted app task", "Extracted browser host serves the same captured application");
     assert((await fetch(`${url.origin}/api/open`, { signal: AbortSignal.timeout(5000) })).status === 403, "Extracted browser host requires owner authorization");
   } finally { reader.releaseLock(); clearTimeout(serverTimer); if (server.exitCode === null) server.kill("SIGKILL"); await server.exited; }
-  await command(["/usr/bin/codesign", "--verify", "--deep", "--strict", join(root, "ALGAL Triage.app")]);
-  checks.push("Extracted .app ad-hoc signature verifies");
   const report = { contract: "algal.triage-package-smoke.v1", ok: true, archive: resolve(archive), archiveSha256: createHash("sha256").update(await readFile(resolve(archive))).digest("hex"), sourceSha256: manifest.provenance.source.sha256, gitHeadAtBuild: manifest.provenance.gitHead, dirtyAtBuild: manifest.provenance.gitWorktreeDirty, platform: `${process.platform}-${process.arch}`, noSourceCheckoutRequired: true, noBunInstallationRequired: true, networkDenied: "not-tested-here", checks, finalHead: capture.head, states: transfer.states.length };
   if (reportPath) await writeFile(reportPath, JSON.stringify(report, null, 2) + "\n");
   console.log(JSON.stringify(report));
