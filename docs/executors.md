@@ -1,9 +1,9 @@
 # Executors
 
-Agent, classifier, and gate cells never reach a provider directly. Each
-activation emits a `algal.effect.v1` request; the host's executor answers
-it. ALGAL owns the schedule, the bounds, and the receipt — the executor
-owns provider access and anything the provider does.
+Agent, classifier, decide, recall, and gate cells never reach a provider
+directly. Each activation emits an `algal.effect.v1` request; the host's
+executor answers it. ALGAL controls the schedule, limits and saved run;
+the executor handles provider access.
 
 ## The wire shape
 
@@ -28,9 +28,10 @@ stdout fails the cell.
 }
 ```
 
-`kind` is `agent`, `classifier`, or `gate`. A gate is an approval point —
-route those requests to a human or a policy check, not a model. `route` is a
-hint carried through verbatim; honoring it is the executor's business.
+`kind` is `agent`, `classifier`, `decide`, `recall`, or `gate`. A `decide`
+request carries `questions`; `recall` carries a derived query. A gate is an
+approval point: route it to a human or policy check, not a model. `route`
+selects a compatible host executor by provider or preset name.
 
 `context.cells` appears only when the cell's `view.cells` declares ancestor
 cells; each entry is the ancestor's committed record (`status`, `outputs?`)
@@ -121,6 +122,92 @@ Library hosts use `openAICompatibleExecutor({ baseUrl, model, credentialEnv?,
 responseFormat?, timeoutMs?, maxResponseBytes? })` from `@hraness/algal`.
 `--recall local` selects deterministic trigram embeddings, not a local language
 model; model generation uses the endpoint options above.
+
+## Cloudflare Clef
+
+Clef serves `decide` and `classifier` cells, never generated agent output
+or approval gates. Both CLIs select it with `--clef`, which defaults to
+`clef`; use `--clef clef-flash` for the other supported model. Hosted calls
+are paid and opt-in. ALGAL has not measured Clef quality or latency for
+its examples; historical Jev measurements do not apply to Clef.
+
+Set `CLOUDFLARE_ACCOUNT_ID` to 32 lowercase hexadecimal characters and
+`CLOUDFLARE_API_TOKEN` to your token. `CLOUDFLARE_AUTH_TOKEN` is a token
+alias; the nonempty primary token takes precedence. Both CLIs resolve
+the token only from the environment, never a TypeSafe key or local vault.
+The account may also be set in a native host's `accountId` field.
+`algal auth clef --status` reports redacted credential status and
+`algal doctor --clef` checks configuration without an API call.
+
+```sh
+bun cli.ts run examples/model-router.algal.json \
+  --args examples/model-router.args.json --clef
+algal run examples/model-router.algal.json \
+  --args examples/model-router.args.json --clef clef-flash
+```
+
+The Bun `--executors` map and both bench executor maps accept `clef` or
+`clef:clef-flash`. A native `--host` file uses `algal.host.v1`:
+
+```json
+{
+  "contract": "algal.host.v1",
+  "executors": { "judge": { "kind": "clef", "model": "clef" } },
+  "defaultExecutor": "judge"
+}
+```
+
+The native backend accepts optional `accountId` (defaulting to the
+account environment variable) and `images`. Library hosts use
+`clefExecutor({ accountId?, model?, images?, credential? })` or
+`clefAsker` from `@hraness/algal`; `credential` may be an in-memory token
+or an async resolver. A custom `asker` cannot be combined with configured
+images. Credentials never enter configuration, cache or saved-run identity.
+The account, model and configured image bytes do: changing any of them
+changes the cache identity and saved `configurationDigest`.
+
+### Images and limits
+
+`--clef --images images.json` attaches the JSON file's image array to each
+Clef request. Use embedded PNG/JPEG/WebP data URLs or
+`{ "content_type": "image/png", "base64": "..." }` objects. Remote URLs
+are rejected. The limits are 4 images, 4 MiB per image and 8 MiB total after
+base64 decoding into file bytes, 16 megapixels per image, and 13 MiB for
+the image JSON file and final request body. Inline native host images
+share the separate 1 MiB limit for the entire `algal.host.v1` configuration,
+including base64 text. Use the separate `--images` file for the larger budget.
+
+Normal manifest runs receive only host-configured images. There is no
+manifest image field, implicit file read, or source-code attachment.
+Direct low-level calls may use `clefAsker.ask(state, questions, signal,
+images)`, TypeScript `EffectRequest.images`, or native `clef::prepare`;
+supply them before computing the request digest. Only one image source is
+accepted. Container structure, signatures and dimensions are checked
+before credential resolution and dispatch. The adapter does not decode
+pixel streams or verify PNG checksums, so it cannot guarantee that every
+payload will decode. Header-only and truncated containers are rejected;
+animated WebP without a top-level image payload is not supported.
+
+Text state is limited to 262144 canonical JSON bytes. Question IDs match
+`[A-Za-z0-9_.-]{1,100}`; there are at most 64 questions, with nonempty
+instructions up to 4096 UTF-8 bytes. Choices require 2..32 options; scores
+require 2..10 ordered levels. Responses must match the model, IDs, types
+and legends. Probability and score rounding follow the
+[decision specification](../spec/v1/organism.md#decide-cells), preserving
+the reported values. Default response size is 1 MiB and the adapter's
+maximum request duration is 120 seconds, further limited by the cell's
+deadline. The fixed Cloudflare account/model endpoint rejects redirects;
+transport or response-read failure after dispatch is uncertain and cannot
+be automatically retried. Errors withhold credentials and response bodies.
+Saved runs record model identity, token usage and configuration digest and
+replay without either provider.
+
+## Legacy Jev
+
+`--jev`, `jevAsker`, `jevExecutor` and native `kind:"jev"` are explicit
+legacy adapters. They use `TYPESAFE_API_KEY` or the legacy credential vault,
+never Cloudflare credentials, and reject images. Historical fixtures and
+study results keep their original Jev identities and replay offline.
 
 ## Apple Intelligence
 
@@ -250,8 +337,10 @@ described under "Tool registries".
 ## Rules of thumb
 
 - Keep secrets in the command's environment or config, never in manifests.
-- The request is the whole job: prompt, view-selected context, output
-  contract, budgets. Do not read other files to answer it.
+- The request contains the prompt, view-selected context, output contract
+  and budgets. Provider-specific host configuration may also supply fixed
+  inputs such as Clef images; bind those inputs to configuration and cache
+  identity. Do not implicitly read unrelated files to answer a request.
 - Print only the output value on stdout — logs go to stderr.
 - Respect `budget.maxOutputBytes`; oversized output fails the cell.
 - Errors count: a thrown effect is recorded on the receipt as

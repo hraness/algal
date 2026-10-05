@@ -26,6 +26,7 @@ pub mod build_info;
 pub mod canonical;
 pub mod capabilities;
 pub mod civilization;
+pub mod clef;
 pub mod context;
 pub mod context_history;
 pub mod context_history_access;

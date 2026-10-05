@@ -534,15 +534,16 @@ Cell kinds:
   question map (`{"answers":{…}}`), the effect request carries `questions`,
   and the provider must return exactly the declared answers. Decision
   executors serve `decide` and `classifier` cells only — they can never
-  generate agent output or approve a gate. Jev (TypeSafe `systemone`) is
-  the first such provider, admitted with `--jev`; its key lives in
-  `TYPESAFE_API_KEY` or the local vault via `algal auth jev`.
+  generate agent output or approve a gate. Cloudflare Clef serves these
+  decisions when you select `--clef` (`clef` by default, or `clef-flash`).
+  Paid inference is opt-in. Set `CLOUDFLARE_ACCOUNT_ID` and
+  `CLOUDFLARE_API_TOKEN`; `CLOUDFLARE_AUTH_TOKEN` is a token alias.
 - `recall` — an expression-derived semantic query over a host-owned index,
   recorded as an ordinary effect. `out` carries bounded ranked hits; when the
   first hit names a value-store object, `ref` carries its `sha256:` token
   directly into `load`. Empty recall is successful and leaves ref consumers
   skipped. Optional `rerank:{route,take?}` sends one recorded `noul` relevance
-  question per hit to a decision provider such as Jev, then reorders the exact
+  question per hit to a decision provider such as Clef, then reorders the exact
   source records without summarizing them. The request binds query, `k`, and
   embedder; replay serves the recorded hits and decisions without consulting a
   mutable index.
@@ -806,7 +807,7 @@ contract data: it changes nothing about digests, receipts, or replay.
 `recall` cell makes the same capability available inside an organism through
 a recorded effect. Its bounded expression produces the query, `out` exposes
 ranked text and provenance, and a top value hit also emits `ref` for direct
-`load` resolution. Add `rerank:{route:{provider:"jev"},take:…}` to score each
+`load` resolution. Add `rerank:{route:{provider:"clef"},take:…}` to score each
 dynamic hit through the typed decision seam before choosing that top ref; the
 original hit records remain intact and the `decide` answers ride the receipt.
 Index-backed recall is deliberately not effect-cached; replay comes from the
@@ -824,27 +825,59 @@ bun run cli run organism-with-recall.json --dir .algal --recall local
 When one organism combines recall with another effect provider, give the
 recall cell an explicit route such as `{"provider":"memory"}` and its rerank
 policy a decision route such as `{"provider":"judge"}`. The Bun `--executors`
-map can admit `"memory":"recall"` and `"judge":"jev"`; native
+map can attach `"memory":"recall"` and `"judge":"clef"`; native
 `algal.host.v1` entries use
 `"memory":{"kind":"recall","dir":".algal","embedder":"local"}` and a
-separate Jev backend. The derived index implementations use different
+separate `"judge":{"kind":"clef"}` backend. The derived index implementations use different
 disposable storage (SQLite in TypeScript, JSONL natively) but produce the same
 local vectors and hybrid ranking.
 
 ## Provider credentials
 
-Provider keys never enter manifests, receipts, digests, or logs — they resolve
-at the executor boundary only. `auth` vaults them locally cross-platform
-(macOS Keychain, libsecret, Windows DPAPI, or — when no vault is available —
-a plaintext file under `~/.algal/credentials` (or `$ALGAL_HOME`) with mode
-0600; both CLIs print a warning when they fall back to it); the provider env var always works as a CI
-escape hatch.
+The Cloudflare Clef CLIs read `CLOUDFLARE_ACCOUNT_ID` (32 lowercase
+hexadecimal characters) and `CLOUDFLARE_API_TOKEN` from the environment.
+The token may also come from `CLOUDFLARE_AUTH_TOKEN`. Library hosts may
+supply an explicit in-memory credential or async resolver. Tokens never enter manifests, saved
+runs, configuration digests, or logs. ALGAL does not save Cloudflare tokens
+or reuse a TypeSafe key. `doctor --clef` checks configuration without an API
+call; inference starts only when you attach a Clef executor.
 
 ```sh
-bun run cli auth jev            # vault a TypeSafe Jev key (TYPESAFE_API_KEY)
-bun run cli auth jev --status   # where the key resolves from (hint only)
-bun run cli doctor --jev        # live one-question check against systemone
+bun run cli auth clef --status
+bun run cli doctor --clef
+bun run cli run examples/model-router.algal.json --args examples/model-router.args.json --clef
 ```
+
+Both CLIs accept `--clef clef-flash`. For embedded images, pass
+`--images images.json` with `--clef`; the file contains an array of PNG,
+JPEG or WebP data URLs or `{content_type,base64}` objects. Limits are 4
+images, 4 MiB per image and 8 MiB total after base64 decoding into file
+bytes, 16 megapixels per image, and 13 MiB for the JSON file and request
+body. Native `algal.host.v1` files may configure an `images` array on a Clef
+backend, but the entire host file has a separate 1 MiB limit, including
+base64 text. Use `--clef --images` for the larger image budget.
+
+Normal manifest runs use only executor-configured images; a manifest
+cannot supply image files or implicitly attach source code. Direct adapter
+calls can pass images through `clefAsker.ask(state, questions, signal,
+images)`, TypeScript `EffectRequest.images`, or native `clef::prepare`.
+These are low-level host interfaces, not manifest fields. Only one image
+source is accepted. Remote URLs, invalid base64, mismatched signatures,
+truncated containers and exceeded limits fail before credential resolution
+or dispatch. The checks inspect container structure and dimensions, not
+pixel decoding or PNG checksums; they do not establish that every image
+payload is decodable. See [executor configuration](docs/executors.md#cloudflare-clef).
+ALGAL rejects oversized state instead of truncating it; the provider's
+context limits also apply. Clef requires nonempty
+instructions, question IDs matching `[A-Za-z0-9_.-]{1,100}`, at least two
+choice options, and 2 to 10 score levels. ALGAL also limits choices to 32.
+Responses must match the questions and selected model, with valid probability
+mass, confidence, score legends and token counts.
+
+The explicit `--jev`, `jevAsker`, `jevExecutor` and native `kind:"jev"`
+paths remain for legacy integrations. They use their own TypeSafe credential
+and never supply Cloudflare credentials. Historical Jev runs replay offline
+without contacting either provider.
 
 ## Foundry: select organisms by evidence
 
@@ -955,9 +988,9 @@ algal bench verify bench-report.json --dir .algal
 
 A `algal.bench.config.v1` file names case `args`/`expect` pairs and systems
 whose `executors` map names to `gateway:<provider/model>` (Vercel AI Gateway),
-`scripted:<file>`, or `cmd:<command>` specs. The Bun CLI also accepts
-`jev[:<model>]` and `recall[:<embedder>]`; the native CLI accepts `apple` for
-the on-device bridge and admits Jev/recall through `algal.host.v1`. Named entries answer `route.preset` /
+`clef[:<model>]`, `scripted:<file>`, or `cmd:<command>` specs. The Bun CLI
+also accepts `recall[:<embedder>]`; the native CLI accepts `apple` for the
+on-device bridge and attaches recall through `algal.host.v1`. Named entries answer `route.preset` /
 `route.provider`; the fallback is the first listed entry (in the native CLI,
 the first name alphabetically). The report records per-case results, work,
 token usage, per-model effect attribution, and the non-dominated pareto set on

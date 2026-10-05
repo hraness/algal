@@ -30,12 +30,19 @@ pipeline/
   record-triage.algal.json       reference pipeline (agent + expr cells)
   record-triage.responses.json   scripted classify responses for the
                                  acquisition batches, keyed by request digest
-  record-triage-jev.algal.json   per-record classify variant: `each` maps
-                                 records through a child classifier whose
-                                 `labelsExpr` resolves the task taxonomy
-  record-classify.algal.json     the child: one classifier effect routed to
-                                 `provider: "jev"`, emitting {recordId, label}
+  record-triage-clef.algal.json  current per-record classify variant: `each`
+                                 maps records through the Clef child
+  record-classify-clef.algal.json classifier routed to `provider: "clef"`,
+                                 with task taxonomy resolved by `labelsExpr`
+  record-triage-jev.algal.json   historical Jev pipeline
+  record-classify.algal.json     historical Jev child
 ```
+
+The current hosted decision variant uses Cloudflare Clef. Attach `--clef`
+(or a named native `kind:"clef"` host), set `CLOUDFLARE_ACCOUNT_ID` and
+`CLOUDFLARE_API_TOKEN`, and load the Clef child from `pipeline/`. Calls are
+paid and opt-in. The Jev variants and completed study results remain
+historical; their accuracy and cost numbers are not Clef measurements.
 
 ## Task spec: `algal.experiment-task.v1`
 

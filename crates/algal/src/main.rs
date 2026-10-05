@@ -111,8 +111,16 @@ struct Execution {
     #[arg(long)]
     gateway_model: Option<String>,
     /// TypeSafe Jev decision executor; bare `--jev` uses `jev-latest`.
-    #[arg(long, num_args = 0..=1, default_missing_value = "jev-latest")]
+    #[arg(long, num_args = 0..=1, default_missing_value = "jev-latest", help = "Legacy TypeSafe Jev executor; use --clef for current Cloudflare decisions")]
     jev: Option<String>,
+    #[arg(long, num_args = 0..=1, default_missing_value = "clef", help = "Cloudflare Clef decision executor (clef or clef-flash; paid, opt-in)", long_help = "Cloudflare Clef decision executor (clef or clef-flash; paid, opt-in). Set CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN; CLOUDFLARE_AUTH_TOKEN is a token alias.")]
+    clef: Option<String>,
+    #[arg(
+        long,
+        requires = "clef",
+        help = "JSON array of embedded PNG/JPEG/WebP images; max 4, 4 MiB each, 8 MiB total"
+    )]
+    images: Option<PathBuf>,
     /// Derived-index recall executor; embedder is `local` or `gateway[:<model>]`.
     #[arg(long, num_args = 0..=1, default_missing_value = "local")]
     recall: Option<String>,
@@ -448,6 +456,9 @@ enum Commands {
     /// Vault a provider credential locally; never echoes the key.
     Auth {
         /// Credential provider (`jev`).
+        #[arg(
+            help = "Credential provider: clef (environment-only status) or jev (legacy local vault)"
+        )]
         provider: String,
         /// Report the credential's redacted status and exit.
         #[arg(long)]
@@ -470,6 +481,8 @@ enum Commands {
         /// TypeSafe Jev availability: credential status plus a live probe.
         #[arg(long)]
         jev: bool,
+        #[arg(long, help = "Check Cloudflare Clef configuration without an API call")]
+        clef: bool,
         /// Print the machine-readable report (the default when not at a terminal).
         #[arg(long)]
         json: bool,
@@ -1161,6 +1174,7 @@ fn host(options: &Execution, dir: &Path) -> Result<Host> {
         + usize::from(options.executor_cmd.is_some())
         + usize::from(options.gateway_model.is_some())
         + usize::from(options.jev.is_some())
+        + usize::from(options.clef.is_some())
         + usize::from(options.recall.is_some())
         + usize::from(options.base_url.is_some())
         + usize::from(options.apple)
@@ -1227,6 +1241,16 @@ fn host(options: &Execution, dir: &Path) -> Result<Host> {
             Some(Backend::Gateway {
                 model: model.clone(),
             })
+        } else if let Some(model) = &options.clef {
+            Some(Backend::Clef {
+                model: model.clone(),
+                account_id: std::env::var("CLOUDFLARE_ACCOUNT_ID").unwrap_or_default(),
+                images: options
+                    .images
+                    .as_ref()
+                    .map(|path| load(path, algal::clef::MAX_BODY))
+                    .transpose()?,
+            })
         } else if let Some(model) = &options.jev {
             Some(Backend::Jev {
                 model: model.clone(),
@@ -1261,7 +1285,11 @@ fn host(options: &Execution, dir: &Path) -> Result<Host> {
         let mut host = Host::default();
         if let Some(backend) = backend {
             backend.validate()?;
-            host.entries.push(("default".into(), backend));
+            let id = match &backend {
+                Backend::Clef { model, .. } => algal::clef::executor_id(model),
+                _ => "default".into(),
+            };
+            host.entries.push((id, backend));
         }
         host
     };
@@ -1505,6 +1533,7 @@ async fn execute(cli: Cli) -> Result<bool> {
                 && options.host.is_none()
                 && options.gateway_model.is_none()
                 && options.jev.is_none()
+                && options.clef.is_none()
                 && options.recall.is_none()
                 && options.base_url.is_none()
                 && !options.apple
@@ -3347,6 +3376,11 @@ async fn execute(cli: Cli) -> Result<bool> {
                 emit(&algal::credentials::status(&provider)?)?;
                 return Ok(true);
             }
+            if provider == "clef" {
+                return Err(Error::invalid(
+                    "Clef credentials are environment-only; set CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN (CLOUDFLARE_AUTH_TOKEN is also accepted)",
+                ));
+            }
             if forget {
                 let removed = algal::credentials::forget(&provider)?;
                 emit(&json!({"provider":provider,"removed":removed}))?;
@@ -3382,6 +3416,7 @@ async fn execute(cli: Cli) -> Result<bool> {
             apple,
             apple_bridge,
             jev,
+            clef,
             json,
         } => {
             // The report is data on stdout: a pipe keeps the JSON object unless
@@ -3391,6 +3426,19 @@ async fn execute(cli: Cli) -> Result<bool> {
                 && (io::stdout().is_terminal()
                     || cli_style::explicit_audience(&cli_style::process_env)
                         == Some(cli_style::Audience::Human));
+            if clef {
+                let credential = algal::credentials::status("clef")?;
+                let account_configured = algal::clef::endpoint(
+                    &std::env::var("CLOUDFLARE_ACCOUNT_ID").unwrap_or_default(),
+                    "clef",
+                )
+                .is_ok();
+                let configured = account_configured && credential["configured"] == true;
+                emit(
+                    &json!({"provider":"clef","configured":configured,"accountConfigured":account_configured,"credential":credential,"liveChecked":false}),
+                )?;
+                return Ok(configured);
+            }
             if jev {
                 let status = tokio::task::spawn_blocking(|| algal::credentials::status("jev"))
                     .await
@@ -3476,7 +3524,9 @@ async fn execute(cli: Cli) -> Result<bool> {
                 }
                 Ok(diagnosis.available())
             } else if human {
-                let jev_env = std::env::var("TYPESAFE_API_KEY").is_ok_and(|key| !key.is_empty());
+                let clef_env = std::env::var("CLOUDFLARE_API_TOKEN")
+                    .or_else(|_| std::env::var("CLOUDFLARE_AUTH_TOKEN"))
+                    .is_ok_and(|key| !key.is_empty());
                 print_doctor(
                     &[
                         (
@@ -3487,16 +3537,16 @@ async fn execute(cli: Cli) -> Result<bool> {
                                 platform_name()
                             ),
                         ),
-                        if jev_env {
+                        if clef_env {
                             (
                                 cli_style::Symbol::Ok,
-                                "Jev key found in TYPESAFE_API_KEY. Test it: algal doctor --jev"
+                                "Cloudflare token found. Check configuration: algal doctor --clef"
                                     .into(),
                             )
                         } else {
                             (
                                 cli_style::Symbol::Skip,
-                                "Jev decisions: not checked. Test a saved key: algal doctor --jev"
+                                "Clef decisions: not configured. Set CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN."
                                     .into(),
                             )
                         },

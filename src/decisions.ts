@@ -29,7 +29,7 @@ export type { DecisionQuestion, DecisionQuestions };
 
 export const DECISION_BOUNDS = {
   maxQuestions: 64,
-  maxQuestionNameLen: 64,
+  maxQuestionNameLen: 100,
   maxInstructionsBytes: 4096,
   maxCriteria: 32,
   maxCriterionBytes: 512,
@@ -49,6 +49,7 @@ export type DecisionAnswer =
       score: number;
       confidence: number;
       probabilities: Record<string, number>;
+      legend?: Record<string, JsonValue>;
     };
 
 export type DecisionUsage = {
@@ -72,6 +73,7 @@ export interface DecisionAsker {
     state: DecisionState,
     questions: DecisionQuestions,
     signal?: AbortSignal,
+    images?: unknown,
   ): Promise<DecisionResponse>;
 }
 
@@ -123,7 +125,7 @@ export function parseDecisionQuestion(u: unknown, at: string): DecisionQuestion 
         `${at}.criteria requires 1..${DECISION_BOUNDS.maxCriteria} entries`,
       );
     }
-    const out: Record<string, string | null> = {};
+    const out: Record<string, string | null> = Object.create(null) as Record<string, string | null>;
     for (const [k, v] of entries) {
       asString(k, `${at}.criteria key`, DECISION_BOUNDS.maxQuestionNameLen);
       out[k] = v === null ? null : asString(v, `${at}.criteria["${k}"]`, DECISION_BOUNDS.maxCriterionBytes);
@@ -155,7 +157,7 @@ export function parseDecisionQuestions(u: unknown, at: string): DecisionQuestion
       `${at} requires 1..${DECISION_BOUNDS.maxQuestions} questions`,
     );
   }
-  const out: DecisionQuestions = {};
+  const out: DecisionQuestions = Object.create(null) as DecisionQuestions;
   for (const name of names) {
     asString(name, `${at} question name`, DECISION_BOUNDS.maxQuestionNameLen);
     out[name] = parseDecisionQuestion(obj[name], `${at}["${name}"]`);
@@ -313,7 +315,7 @@ function choiceQuestion(request: EffectRequest): DecisionQuestions {
       `a decision executor cannot serve a ${request.output.kind} output — it answers typed decisions, not generated text`,
     );
   }
-  const criteria: Record<string, string | null> = {};
+  const criteria = Object.create(null) as Record<string, string | null>;
   for (const label of request.output.labels) criteria[label] = null;
   return {
     answer: { type: "choice", instructions: request.prompt, criteria },
@@ -377,7 +379,7 @@ export function decisionExecutor(options: DecisionExecutorOptions): Executor {
       prompt: request.prompt,
       context: request.context,
     } as unknown as JsonValue;
-    const response = await options.asker.ask(state, questions, signal);
+    const response = await options.asker.ask(state, questions, signal, request.images);
     const metadata = usageMeta(response);
     if (single !== undefined) {
       const answer = response.answers[single];

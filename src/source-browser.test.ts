@@ -16,17 +16,40 @@ const repository = join(import.meta.dir, "..");
 // This consumer exists only in memory. It imports the compiler by package
 // name, so the bundle resolves the package.json export map as a host would.
 const consumer = join(repository, "browser-consumer.ts");
-let bundled: Promise<Bun.BuildOutput> | undefined;
-function bundle(): Promise<Bun.BuildOutput> {
-  bundled ??= Bun.build({
-    entrypoints: [consumer],
-    files: { [consumer]: [
-      'export * from "@hraness/algal/source";',
-      'export * from "@hraness/algal/source-errors";',
-      'export { setExprExports } from "@hraness/algal/expr";',
-    ].join("\n") },
-    target: "browser", format: "esm", metafile: true, throw: false,
-  });
+interface Bundled {
+  logs: { level: string; message: string }[];
+  success: boolean;
+  metafile?: { inputs: Record<string, { imports: { path: string; external?: boolean }[] }> };
+  output?: string;
+}
+// Keep the bundler's process-global workers out of the test process: the build
+// runs in an owned child so a wedged worker fails on the timeout instead of
+// stalling the shard. The same isolation as the portable-application test.
+let bundled: Promise<Bundled> | undefined;
+function bundle(): Promise<Bundled> {
+  bundled ??= (async () => {
+    const child = Bun.spawn([process.execPath, "--eval", `
+      const consumer = ${JSON.stringify(consumer)};
+      const result = await Bun.build({
+        entrypoints: [consumer],
+        files: { [consumer]: [
+          'export * from "@hraness/algal/source";',
+          'export * from "@hraness/algal/source-errors";',
+          'export { setExprExports } from "@hraness/algal/expr";',
+        ].join("\\n") },
+        target: "browser", format: "esm", metafile: true, throw: false,
+      });
+      console.log(JSON.stringify({
+        logs: result.logs.map(log => ({ level: log.level, message: log.message })),
+        success: result.success,
+        metafile: result.metafile,
+        output: result.outputs[0] ? await result.outputs[0].text() : undefined,
+      }));
+    `], { cwd: repository, stdin: "ignore", stdout: "pipe", stderr: "pipe", timeout: 30_000, killSignal: "SIGKILL" });
+    const [exitCode, stdout, stderr] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
+    if (exitCode !== 0) throw new Error(`browser bundle child exited ${exitCode}: ${stderr}`);
+    return JSON.parse(stdout) as Bundled;
+  })();
   return bundled;
 }
 
@@ -35,10 +58,11 @@ function bundle(): Promise<Bun.BuildOutput> {
  * and workers also provide. */
 async function browserRealm(): Promise<{ host: BrowserHost; context: vm.Context }> {
   const result = await bundle();
-  expect(result.outputs).toHaveLength(1);
+  expect(result.success).toBe(true);
+  expect(typeof result.output).toBe("string");
   const context = vm.createContext({ TextDecoder, TextEncoder, URL, structuredClone });
   const url = "https://example.invalid/app.js";
-  const module = new vm.SourceTextModule(await result.outputs[0]!.text(), { context, identifier: url, initializeImportMeta: meta => { meta.url = url; } });
+  const module = new vm.SourceTextModule(result.output!, { context, identifier: url, initializeImportMeta: meta => { meta.url = url; } });
   await module.link(specifier => { throw new Error(`the browser bundle imports ${specifier}`); });
   await module.evaluate();
   return { host: module.namespace as BrowserHost, context };

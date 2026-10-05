@@ -291,6 +291,15 @@ pub fn load_config(path: &Path, apple_bridge: Option<&Path>) -> Result<BenchConf
                 Backend::Gateway {
                     model: model.to_owned(),
                 }
+            } else if spec == "clef" || spec.starts_with("clef:") {
+                Backend::Clef {
+                    model: spec
+                        .strip_prefix("clef:")
+                        .unwrap_or(crate::clef::DEFAULT_MODEL)
+                        .to_owned(),
+                    account_id: std::env::var("CLOUDFLARE_ACCOUNT_ID").unwrap_or_default(),
+                    images: None,
+                }
             } else if let Some(file) = spec.strip_prefix("scripted:") {
                 Backend::Scripted {
                     responses: read_json(File::open(base.join(file))?, 1_048_576)?,
@@ -324,7 +333,7 @@ pub fn load_config(path: &Path, apple_bridge: Option<&Path>) -> Result<BenchConf
                 Backend::Apple { bridge }
             } else {
                 return Err(Error::invalid(format!(
-                    "bench executor \"{name}\": unknown spec (want gateway:<model>, scripted:<file>, cmd:<command>, or apple)"
+                    "bench executor \"{name}\": unknown spec (want gateway:<model>, clef[:<model>], scripted:<file>, cmd:<command>, or apple)"
                 )));
             };
             backend.validate()?;

@@ -164,7 +164,7 @@ fn doctor_prints_sentences_for_a_person_and_json_for_scripts() {
         )),
         "{stdout}"
     );
-    assert!(stdout.contains("– Jev decisions: not checked."));
+    assert!(stdout.contains("– Clef decisions: not configured."));
     assert_eq!(text(&human.stderr), "Next: algal demo start ./my-review\n");
 
     let piped = algal(&["doctor"], &[]);

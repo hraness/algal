@@ -1,0 +1,70 @@
+{
+  "contract": "algal.organism.v1",
+  "key": "organism:experiment-record-triage-clef",
+  "name": "Record triage task pipeline with Clef",
+  "note": "Each record is classified through the Cloudflare Clef child, with the task taxonomy resolved by labelsExpr. Deterministic expressions apply rules, summarize and pack results. Hosted execution is paid and opt-in. Historical Jev results are preserved separately and do not measure this variant.",
+  "budgets": { "maxSteps": 256, "maxAgentCalls": 64, "maxWork": 500000 },
+  "interface": {
+    "inputs": { "records": { "cell": "in", "port": "records" }, "spec": { "cell": "in", "port": "spec" } },
+    "outputs": { "out": { "cell": "pack", "port": "out" } }
+  },
+  "cells": [
+    { "id": "in", "kind": "input", "outputs": { "records": "json", "spec": "json" } },
+    { "id": "per", "kind": "each", "manifest": "sha256:938551cf60a8b733053776da2509053ebc14a1b29894730e5c6d5dbd429ed5f1", "over": "record", "maxItems": 64 },
+    {
+      "id": "apply", "kind": "expr", "inputs": { "records": "json", "spec": "json", "pairs": "json" },
+      "expr": {
+        "contract": "algal.expr.v1",
+        "program": [
+          "map", ["get", "records"], "r",
+          ["let", "lab",
+            ["fold", ["get", "pairs"], null, "acc", "p", ["if", ["eq", ["get", "p", "recordId"], ["get", "r", "id"]], ["get", "p", "label"], ["get", "acc"]]],
+            ["merge",
+              { "recordId": ["get", "r", "id"], "label": ["get", "lab"] },
+              ["fold", ["get", "spec", "rules"], {}, "acc", "rule",
+                ["if",
+                  ["fold", ["keys", ["get", "rule", "when"]], true, "ok", "slot",
+                    ["and", ["get", "ok"],
+                      ["let", "c", ["get", "rule", "when", ["get", "slot"]],
+                        ["let", "sv", ["if", ["eq", ["get", "slot"], "label"], ["get", "lab"], ["get", "r", ["get", "slot"]]],
+                          ["if", ["isMap", ["get", "c"]],
+                            ["if", ["has", ["get", "c"], "in"],
+                              ["contains", ["get", "c", "in"], ["get", "sv"]],
+                              ["and",
+                                ["if", ["has", ["get", "c"], "min"], ["gte", ["get", "sv"], ["get", "c", "min"]], true],
+                                ["if", ["has", ["get", "c"], "max"], ["lte", ["get", "sv"], ["get", "c", "max"]], true],
+                                ["if", ["has", ["get", "c"], "eq"], ["eq", ["get", "sv"], ["get", "c", "eq"]], true]]],
+                            ["eq", ["get", "c"], ["get", "sv"]]]]]]],
+                  ["merge", ["get", "acc"], ["get", "rule", "then"]], ["get", "acc"]]]]]]
+      },
+      "output": { "kind": "json", "schema": { "type": "array" } }
+    },
+    {
+      "id": "summarize", "kind": "expr", "inputs": { "results": "json", "spec": "json" },
+      "expr": {
+        "contract": "algal.expr.v1",
+        "program": [
+          "map", ["get", "spec", "outputFormat", "summaries"], "sname",
+          ["if", ["eq", ["get", "sname"], "total"],
+            { "name": "total", "counts": ["list", { "key": "records", "count": ["len", ["get", "results"]] }] },
+            ["if", ["eq", ["get", "sname"], "perLabel"],
+              { "name": "perLabel", "counts": ["map", ["get", "spec", "taxonomy", "classes"], "c", { "key": ["get", "c", "id"], "count": ["len", ["filter", ["get", "results"], "r", ["eq", ["get", "r", "label"], ["get", "c", "id"]]]] }] },
+              ["let", "fld", ["if", ["eq", ["get", "sname"], "perDecision"], "decision", ["if", ["eq", ["get", "sname"], "perPriority"], "priority", "queue"]],
+                { "name": ["get", "sname"], "counts": ["map", ["get", "spec", "outputFormat", "fields", ["get", "fld"]], "L", { "key": ["get", "L"], "count": ["len", ["filter", ["get", "results"], "r", ["eq", ["get", "r", ["get", "fld"]], ["get", "L"]]]] }] }]]]]
+      },
+      "output": { "kind": "json", "schema": { "type": "array" } }
+    },
+    { "id": "pack", "kind": "expr", "inputs": { "results": "json", "summary": "json" }, "expr": { "contract": "algal.expr.v1", "program": { "results": ["get", "results"], "summary": ["get", "summary"] } }, "output": { "kind": "json", "schema": { "type": "object" } } }
+  ],
+  "edges": [
+    { "from": { "cell": "in", "port": "records" }, "to": { "cell": "per", "port": "record" } },
+    { "from": { "cell": "in", "port": "spec" }, "to": { "cell": "per", "port": "spec" } },
+    { "from": { "cell": "in", "port": "records" }, "to": { "cell": "apply", "port": "records" } },
+    { "from": { "cell": "in", "port": "spec" }, "to": { "cell": "apply", "port": "spec" } },
+    { "from": { "cell": "per", "port": "pair" }, "to": { "cell": "apply", "port": "pairs" } },
+    { "from": { "cell": "apply", "port": "out" }, "to": { "cell": "summarize", "port": "results" } },
+    { "from": { "cell": "in", "port": "spec" }, "to": { "cell": "summarize", "port": "spec" } },
+    { "from": { "cell": "apply", "port": "out" }, "to": { "cell": "pack", "port": "results" } },
+    { "from": { "cell": "summarize", "port": "out" }, "to": { "cell": "pack", "port": "summary" } }
+  ]
+}

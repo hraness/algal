@@ -57,7 +57,7 @@ const GROUPS: readonly Group[] = [
   {
     title: "Setup",
     rows: [
-      ["auth jev", "Save a TypeSafe Jev key on this computer"],
+      ["auth clef --status", "Check environment-only Cloudflare credentials"],
       ["doctor", "Check that ALGAL is ready"],
       ["update", "Show this Bun runtime's manual update workflow"],
     ],

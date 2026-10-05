@@ -18,7 +18,7 @@ pub const DEFAULT_MODEL: &str = "jev-latest";
 pub const CREDENTIAL_ENV: &str = "TYPESAFE_API_KEY";
 
 const MAX_QUESTIONS: usize = 64;
-const MAX_NAME: usize = 64;
+const MAX_NAME: usize = 100;
 const MAX_INSTRUCTIONS: usize = 4096;
 const MAX_CRITERIA: usize = 32;
 const MAX_CRITERION: usize = 512;
@@ -358,6 +358,11 @@ pub async fn serve(
     request: &Value,
     deadline_ms: u64,
 ) -> Result<(Value, Value)> {
+    if request.get("images").is_some() {
+        return Err(Error::invalid(
+            "Legacy Jev does not support embedded images; use Clef",
+        ));
+    }
     let kind = request["kind"].as_str().unwrap_or("");
     let (questions, single) = match kind {
         "decide" => {

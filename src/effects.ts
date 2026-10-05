@@ -12,6 +12,7 @@ import { AlgalError, ERROR_CODES, type ErrorCode } from "./errors";
 import { commandJson } from "./io-runtime";
 import { asDigest, digestCanonical, type Digest } from "./digest";
 import type { AgentOutput, Route } from "./contract";
+import type { ClefImage } from "./clef-image";
 import { checkSchemaValueV2, checkSchemaValueV3, type SchemaVersion } from "./schema";
 import type { Store } from "./store-contract";
 import {
@@ -67,6 +68,7 @@ export type EffectRequest = {
    * probes). Digested with the request, so a replayed run serves the same
    * questions to the same answers. */
   questions?: DecisionQuestions;
+  images?: ClefImage[];
   /** The derived semantic probe — present only on `kind:"recall"` requests:
    * the expr-evaluated query text, the hit cap, and the embedder spec whose
    * vectors the index must answer over. Digested with the request, so replay

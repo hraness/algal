@@ -6,6 +6,13 @@ composing earlier procedures makes the system better at later work than
 equally resourced alternatives. It preserves the original design and reports
 the exploratory studies below. The broader claim remains open.
 
+For new decision runs, use the Cloudflare Clef variants in
+`experiments/cumulative-skill/pipeline/record-triage-clef.algal.json` and
+`record-classify-clef.algal.json`, with an explicitly attached Clef executor.
+Set `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`; paid calls are opt-in.
+The Jev study descriptions and saved results below remain historical, not
+measurements of Clef.
+
 ## Claim under test
 
 Under a fixed model and a controlled budget, retaining and composing earlier
