@@ -175,7 +175,15 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
-      - run: node node_modules/playwright-core/cli.js install --with-deps chromium
+      - run: |
+          set -euo pipefail
+          sudo python3 scripts/browser_acquisition.py
+          config=/etc/apt/apt.conf.d/99-browser-acquisition
+          sudo test ! -e "$config"
+          sudo test ! -L "$config"
+          trap 'sudo rm -f "$config"' EXIT
+          printf '%s\n' 'Acquire::http::Timeout "20";' 'Acquire::https::Timeout "20";' 'Acquire::Retries "1";' | sudo tee "$config" >/dev/null
+          node node_modules/playwright-core/cli.js install --with-deps chromium
       - uses: actions/cache/save@v6
         if: github.event_name == 'push'
         with:
