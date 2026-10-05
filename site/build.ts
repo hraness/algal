@@ -847,12 +847,31 @@ const SPEC_PAGE_NAMES: Readonly<Record<string, string>> = {
 const mirroredTitle = (title: string, section: "docs" | "spec") =>
   /\bALGAL\b/.test(title) ? `${title} · ${section === "docs" ? "Docs" : "Spec"}` : `${title} · ALGAL ${section}`;
 
+/** Task titles and descriptions for docs whose H1 names the tool rather than
+ * the reader's task. The Markdown H1, its anchor, the rail label, and the
+ * breadcrumb keep the file's own heading; only <title>, og:title, and the
+ * description change. */
+const DOC_PAGE_META: Readonly<Record<string, { title: string; description: string }>> = {
+  "native-workbench": {
+    title: "Pause an agent program for approval and recover it after a crash",
+    description: "Start a native ALGAL program that waits for your approval, approve it in a later command, and run its crash tests. A built-in fixture stands in for the model.",
+  },
+  "agent-tool": {
+    title: "Call an ALGAL program as a tool from Claude Code, Codex, or an API",
+    description: "Generate an OpenAI or Anthropic tool definition from an ALGAL program, call it from Claude Code or Codex through the shell, and verify the result offline.",
+  },
+};
+for (const slug of Object.keys(DOC_PAGE_META)) {
+  if (!DOC_SLUGS.includes(slug)) throw new Error(`DOC_PAGE_META names an unmirrored doc: ${slug}`);
+}
+
 for (const [slug, doc] of docRenderers) {
+  const meta = DOC_PAGE_META[slug];
   await emitDocPage({
     page: "docs", path: `/docs/${slug}/`,
-    title: mirroredTitle(doc.title, "docs"),
-    description: doc.description || `${doc.title}, from the ALGAL documentation.`,
-    ogTitle: doc.title,
+    title: mirroredTitle(meta?.title ?? doc.title, "docs"),
+    description: meta?.description ?? (doc.description || `${doc.title}, from the ALGAL documentation.`),
+    ogTitle: meta?.title ?? doc.title,
     jsonLd: [sectionBreadcrumb({ name: "Docs", path: "/docs/" }, doc.title, `/docs/${slug}/`)],
   }, `<div class="docs-layout">${docsRail(slug, docTitles)}<article class="docs-article prose">${doc.html}${docsSource("docs", slug)}</article></div>`);
 }
