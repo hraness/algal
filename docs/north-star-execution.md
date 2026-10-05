@@ -25,6 +25,16 @@ remain planned; neither the reader nor the job driver enables them by default.
 The [scoped-memory direction](north-star.md#scoped-memory-and-progressive-context)
 tracks that work; its reader foundation does not complete C0 through C4 below.
 
+The [contract and resource experiments](north-star.md#initial-contract-and-resource-experiments)
+add a follow-on direction: contract/runtime correspondence, mixed resource
+requirements, suspendable effects, and measured repayment of procedure-building
+costs. They do not silently enlarge C1 or complete any phase below. Each selected
+experiment needs a scoped implementation plan; C0 records affected consumers and
+C4 can use the resulting evidence. Cloud owns funding and hosting through its
+[companion north star](https://github.com/hraness/algal-cloud/blob/main/docs/north-star.md).
+Existing application/process mechanisms can support early fixtures without
+waiting for the whole actor-language plan.
+
 ## Constraints
 
 - Models propose typed programs or transitions. The host owns permissions,
@@ -51,6 +61,19 @@ tracks that work; its reader foundation does not complete C0 through C4 below.
 - Pin supported immutable artifacts or full source revisions independently in
   each consumer. Do not bind repositories to moving `main` branches or local
   sibling paths. Preserve historical programs, receipts, and experiment pins.
+- Portable resource requirements and host financial state have different owners.
+  ALGAL keeps deterministic work budgets, permission types, and recorded effect
+  semantics. Cloud or another host validates source backing, allocation terms,
+  tariffs, and external usage. A grant is not permission; a credential is not
+  funding. Add a shared record only for a demonstrated gap, with old-version
+  replay and Bun/Rust correspondence. A persistent allocation migration is its
+  own phase, with ownership mapping, dry run, and restore evidence.
+- Hosted consumer pilots reserve hosting independently of provider allowances,
+  including deterministic/cached work and retention. Their records name the
+  hosting payer, backed allocation, captured customer terms, and recovery
+  funding. Cloud's [hosting cost-recovery plan](https://github.com/hraness/algal-cloud/blob/main/docs/hosting-cost-recovery-plan.md)
+  owns collection and expense reconciliation. This does not impose Cloud
+  pricing on local ALGAL use or make live billing a core publication gate.
 - Each rollout has one ALGAL integration owner and one owner per consumer.
   Workers edit disjoint scopes; the integration owner updates this plan's status
   and joins evidence. Only explicitly authorized task-owned delivery proceeds.
@@ -250,15 +273,27 @@ cargo test -p xcb-runtime --locked managed_program
 - **Approach:** Start with two materially different validated workloads while
   other C3 migrations continue. Compare retained procedures with fixed-agent,
   no-library, fresh-synthesis, and conventional baselines under comparable
-  models, tools, information, and total budgets. Include maintenance and
-  migration costs. Follow the
+  models, tools, information, and total resource vectors. Include procedure
+  acquisition, failed trials, evaluation, maintenance, migration, retention,
+  and sponsored usage. Keep incompatible units separate. Distinguish actual
+  hosting expense, customer hosting charges, earned/collected hosting revenue,
+  unconsumed prepaid obligations, and subsidy. Include billing overhead and hold
+  tariffs/allocation rules fixed for execution comparisons. Resource-aware
+  pilots include a sponsored non-revenue workload rather than assuming all
+  backing arrives through customer payments. Freeze the horizon, quality/recovery
+  floors, sample/uncertainty method, minimum useful improvement, and stop rule
+  before search. Further tuning after confirmation requires a new sealed
+  holdout. Follow the
   [cumulative-skill experiment](cumulative-skill-experiment.md); retain failures
   and unknown provider usage. New core changes reopen their impact rows.
 - **Acceptance criteria:** Report held-out task success, correction effort,
   total cost, reuse, stale-work rejection, recovery outcomes, and adoption
   coverage with denominators. Evidence identifies the tested integration and
-  unverified claims. Each future contract, executor, storage, or workflow change
-  assigns consumer impact and follow-up owners before it is called complete.
+  unverified claims. A Cloud hosting pilot identifies its cost-recovery evidence
+  or unresolved status; a good procedure score cannot substitute for collected
+  hosting charges or qualified billing activation. Each future contract,
+  executor, storage, or workflow change assigns consumer impact and follow-up
+  owners before it is called complete.
 - **Validation:** Run the study and verification commands recorded for each
   workload, consume the exact C1–C3 conformance evidence, and independently
   review the comparisons. A mechanism-only outcome is a valid result when
