@@ -785,46 +785,11 @@ nav a[aria-current="page"] { color: var(--ink); }
   }
 }
 
-/* Product landscape: the generated, product-themed world behind the homepage.
- * A grayscale luminance mask carries the drawing, so its ink is the page's own
- * text mixed into the paper: a deeper shade of the background hue in light
- * themes and a lifted one in dark themes, never an accent colour. */
-body:has(> main.product-landscape) {
-  isolation: isolate;
-  position: relative;
+/* Product landscape: this product's drawing for @hraness/design-kit/product-landscape.css.
+ * Public pages opt in with data-hraness-landscape="page"; see the kit's LANDSCAPE.md. */
+:root {
+  --hraness-landscape-image: image-set(url("./landscape/landscape-e118538b95a683b95105029c55b1db9a7967267b42c00bdc2c542a097403c2df.webp") 1x, url("./landscape/landscape-3f464d19210b415fc5b17d0b5feb30cb53a0d9a49869cfa4187b8cf2fc43279a.webp") 2x);
+  --hraness-landscape-image-narrow: url("./landscape/landscape-1ff8900612ff8c7da1954e3f640a470ca53c213e483cebad39f426192299df20.webp");
+  --hraness-landscape-ink: color-mix(in oklch, var(--foreground, CanvasText) 30%, var(--background, Canvas));
 }
-
-@supports (mask-mode: luminance) {
-  body:has(> main.product-landscape)::before {
-    background: color-mix(in oklch, var(--foreground, CanvasText) 30%, var(--background, Canvas));
-    content: "";
-    inset: 0;
-    mask-image: image-set(url("./landscape/landscape-d47a65ab6fe28b81a1346eb2246900ee4a6fa24abea5340c19567038db9935d6.webp") 1x, url("./landscape/landscape-8f3f3dcf85540505deec117c4cbd96024adb384e62a169bf6a1cdf49433be2fd.webp") 2x);
-    mask-mode: luminance;
-    mask-position: top center;
-    mask-repeat: no-repeat;
-    mask-size: 100% auto;
-    opacity: .5;
-    pointer-events: none;
-    position: absolute;
-    z-index: -1;
-  }
-}
-
-@media (max-width: 48rem) {
-  body:has(> main.product-landscape)::before {
-    mask-image: url("./landscape/landscape-43d9ae67ae90f5993f596c75042d925bfc9314fa7ea697a56fb1cdb16122ffb0.webp");
-    opacity: .36;
-  }
-}
-
-@media (forced-colors: active), print {
-  body:has(> main.product-landscape)::before {
-    display: none;
-  }
-}
-
-/* The marketing column repaints the page colour; let the landscape show through it. */
-main.product-landscape {
-  background: transparent;
-}
+/* Product landscape: end */

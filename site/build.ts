@@ -813,7 +813,7 @@ for (const [slug, doc] of specRenderers) docTitles.set(`spec/${slug}`, doc.title
 
 const emitDocPage = async (meta: SitePageMeta, body: string) => {
   routeLabels.set(meta.path, routeLabel(meta.path, meta.ogTitle));
-  let document = pageDocument(meta, `<main id="main" class="hraness-marketing-page docs-page">${body}</main>`);
+  let document = pageDocument(meta, `<main id="main" class="hraness-marketing-page docs-page" data-hraness-landscape="page">${body}</main>`);
   for (const [key, value] of Object.entries(replacements)) document = document.replaceAll(`{{${key}}}`, value);
   if (/\{\{[A-Z_]+\}\}/.test(document)) throw new Error(`Unresolved site build placeholder in ${meta.path}`);
   const target = join(DIST, meta.path, "index.html");
