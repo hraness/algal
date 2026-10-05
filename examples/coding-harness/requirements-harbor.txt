@@ -3,3 +3,5 @@
 # The Docker backend needs no cloud-provider extra. This pins Harbor itself;
 # transitive dependencies are not locked by this requirements file.
 harbor==0.23.0
+anyio>=4.14.2
+idna>=3.15
