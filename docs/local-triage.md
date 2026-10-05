@@ -2,8 +2,8 @@
 
 Local triage is a second ALGAL application with persistent tasks, typed forms,
 filtering, grouping, ordering and an editable reopening policy. The same captured
-state and typed commands drive its browser, Dioxus desktop and Ratatui terminal
-presentations. Schema v2 adds task categories through a replayable memory migration.
+state and typed commands drive its served browser presentation and the standalone
+host CLI. Schema v2 adds task categories through a replayable memory migration.
 
 The [browser task workspace](browser-tasks.md) runs this task model with
 IndexedDB storage and an offline page. The commands below use the filesystem
@@ -23,17 +23,15 @@ commands for that serving process. The browser removes the token from the addres
 bar; the server checks the exact host and origin. Task state is stored in the
 selected local directory. Stop the server to revoke access.
 
-The macOS arm64 package contains `ALGAL Triage.app`, `bin/triage-tui` and a
-standalone `bin/triage-host`. The host embeds Bun and the exact ALGAL expression
-WASM, so running an extracted package needs neither a checkout nor an installed
-Bun. Build it with `bun examples/local-triage/package.ts`; the repository's
-host scheduling rules apply to native builds. Packaging refuses to overwrite
-an existing artifact directory. The package manifest records byte hashes.
+The macOS arm64 package contains the standalone `bin/triage-host` CLI. The host
+embeds Bun and the exact ALGAL expression WASM, so running an extracted package
+needs neither a checkout nor an installed Bun. Build it with
+`bun examples/local-triage/package.ts`; the repository's host scheduling rules
+apply to native builds. Packaging refuses to overwrite an existing artifact
+directory. The package manifest records byte hashes.
 
-The desktop adapter uses the system WebView. The local artifact is ad-hoc signed,
-not notarized; other desktop operating systems and mobile distribution are not
-qualified by this package. See the [renderer guide](../examples/local-triage/renderers/README.md)
-for keyboard controls, build commands and the exact supported profiles.
+The local artifact is unsigned; other desktop operating systems and mobile
+distribution are not qualified by this package.
 
 ## Tasks, drafts and revisions
 

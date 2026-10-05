@@ -6,14 +6,12 @@ import { fileURLToPath } from "node:url";
 import { release } from "node:os";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../.."), args = process.argv.slice(2);
-let output = join(root, "examples/local-triage/dist"), target = join(root, "examples/malleable-site/renderers/target"), native: string | null = null, bridge: string | null = null, skipRust = false;
+let output = join(root, "examples/local-triage/dist"), native: string | null = null, bridge: string | null = null;
 for (let i = 0; i < args.length; i++) {
   const value = args[i];
   if (value === "--output") output = resolve(args[++i] ?? "");
-  else if (value === "--target-dir") target = resolve(args[++i] ?? "");
   else if (value === "--native") native = resolve(args[++i] ?? "");
   else if (value === "--bridge") bridge = resolve(args[++i] ?? "");
-  else if (value === "--skip-rust") skipRust = true;
   else throw new Error(`Unknown package argument ${value}`);
 }
 if (process.platform !== "darwin" || process.arch !== "arm64") throw new Error("This package target requires macOS arm64");
@@ -33,32 +31,30 @@ async function commandText(argv: string[]): Promise<string> {
   return stdout.trim();
 }
 async function sourceSnapshot() {
-  const patterns = ["package.json", "bun.lock", "tsconfig.json", "src/**/*.ts", "src/algal_expr.wasm", "examples/local-triage/*.ts", "examples/local-triage/session-compatibility-fixtures.json", "examples/local-triage/renderers/src/**/*.rs", "examples/local-triage/renderers/Cargo.toml", "examples/local-triage/renderers/Cargo.lock", "examples/local-triage/renderers/fixture.json", "examples/local-triage-web/*.ts", "examples/local-triage-inference/*.ts"];
+  const patterns = ["package.json", "bun.lock", "tsconfig.json", "src/**/*.ts", "src/algal_expr.wasm", "examples/local-triage/*.ts", "examples/local-triage/session-compatibility-fixtures.json", "examples/local-triage-web/*.ts", "examples/local-triage-inference/*.ts"];
   const paths = new Set<string>();
   for (const pattern of patterns) for await (const path of new Bun.Glob(pattern).scan({ cwd: root, onlyFiles: true })) paths.add(path);
   const files = await Promise.all([...paths].sort().map(async path => { const bytes = await readFile(join(root, path)); return { path, bytes: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") }; }));
   return { scope: "declared-source-superset-including-tests", patterns, sha256: createHash("sha256").update(JSON.stringify(files)).digest("hex"), files };
 }
 const source = await sourceSnapshot();
-const provenance = { gitHead: await commandText(["/usr/bin/git", "rev-parse", "HEAD"]), gitWorktreeDirty: (await commandText(["/usr/bin/git", "status", "--porcelain"])).length > 0, bunVersion: Bun.version, rustcVersion: await commandText([join(process.env.HOME ?? "", ".cargo/bin/rustc"), "--version"]), cargoVersion: await commandText([join(process.env.HOME ?? "", ".cargo/bin/cargo"), "--version"]), darwinRelease: release(), rendererBuild: skipRust ? "reuse-existing-explicitly-requested" : "cargo build --locked --offline (debug)", hostBuild: "bun build --compile --target=bun-darwin-arm64", bundledInferenceSourceRebuilt: false, source };
-if (!skipRust) await command([join(process.env.HOME ?? "", ".cargo/bin/cargo"), "build", "--manifest-path", join(root, "examples/local-triage/renderers/Cargo.toml"), "--locked", "--offline", "--target-dir", target]);
+const provenance = { gitHead: await commandText(["/usr/bin/git", "rev-parse", "HEAD"]), gitWorktreeDirty: (await commandText(["/usr/bin/git", "status", "--porcelain"])).length > 0, bunVersion: Bun.version, darwinRelease: release(), hostBuild: "bun build --compile --target=bun-darwin-arm64", bundledInferenceSourceRebuilt: false, source };
 await command([process.execPath, "build", join(root, "examples/local-triage/packaged-entry.ts"), "--compile", "--target=bun-darwin-arm64", "--outfile", join(bin, "triage-host")]);
-await copyFile(join(target, "debug/triage-tui"), join(bin, "triage-tui"));
 if (native && bridge) {
   for (const [source, name] of [[native, "algal-native"], [bridge, "algal-apple"]] as const) {
     const info = await stat(source); if (!info.isFile() || info.size > 268_435_456 || !(info.mode & 0o111)) throw new Error("Bundled inference path is not a bounded executable");
     await copyFile(source, join(bin, name));
   }
 }
-const executablePaths = ["bin/triage-host", "bin/triage-tui", ...(native ? ["bin/algal-native", "bin/algal-apple"] : [])];
+const executablePaths = ["bin/triage-host", ...(native ? ["bin/algal-native", "bin/algal-apple"] : [])];
 for (const path of executablePaths) await chmod(join(directory, path), 0o755);
-const readme = `# ALGAL Triage — macOS arm64\n\nRun bin/triage-tui in a terminal, or bin/triage-host for the standalone CLI.\nNeither needs a source checkout or Bun installation.\nFor the same application in a browser, run bin/triage-host DIRECTORY APPLICATION serve and open its local owner URL. Initialize a new identity with init first. Keep the owner URL private.\n\nDefault state: ~/Library/Application Support/ALGAL Triage\nOptional args: --dir DIRECTORY --application ID --host EXECUTABLE\nUse a separate directory for experiments. Existing state is preserved on errors.\n\n32 tasks / 128 lifecycle states per identity. Save drafts before closing.\nExact-head commands, retained receipts, explicit migration and authority-free forks.\nThis local artifact is unsigned.\n${native ? "Apple native runtime and bridge are bundled in bin/. Apple Intelligence requires a supported Apple Silicon Mac, macOS 26+, enabled Apple Intelligence and downloaded model assets. No cloud fallback.\n" : "This build does not bundle an inference provider. Explicit proposal import remains available.\n"}\nCLI: bin/triage-host DIRECTORY APPLICATION init|capture|command|propose-evaluate|adopt|export|verify|import|fork|review-merge|adopt-merge|load-session|save-session|propose-apple|serve ...\n\nIn the TUI: n add, e edit, p priority, c category, space complete/reopen, f filter, / query, Ctrl-S save draft, Ctrl-R refresh, r rebase, v preview, a adopt, S/G/V/R adjust policy, d transfer path, x export, o import, b fork, i proposal import, q save and quit.\n\nAll required byte hashes, source inventory, build provenance and platform requirements are in manifest.json. Content hashes identify the exact artifact; they do not establish publisher authentication.\n`;
+const readme = `# ALGAL Triage — macOS arm64\n\nRun bin/triage-host in a terminal; it needs no source checkout or Bun installation.\nFor the same application in a browser, run bin/triage-host DIRECTORY APPLICATION serve and open its local owner URL. Initialize a new identity with init first. Keep the owner URL private.\n\nDefault state: ~/Library/Application Support/ALGAL Triage\nOptional args: --dir DIRECTORY --application ID --host EXECUTABLE\nUse a separate directory for experiments. Existing state is preserved on errors.\n\n32 tasks / 128 lifecycle states per identity. Save drafts before closing.\nExact-head commands, retained receipts, explicit migration and authority-free forks.\nThis local artifact is unsigned.\n${native ? "Apple native runtime and bridge are bundled in bin/. Apple Intelligence requires a supported Apple Silicon Mac, macOS 26+, enabled Apple Intelligence and downloaded model assets. No cloud fallback.\n" : "This build does not bundle an inference provider. Explicit proposal import remains available.\n"}\nCLI: bin/triage-host DIRECTORY APPLICATION init|capture|command|propose-evaluate|adopt|export|verify|import|fork|review-merge|adopt-merge|load-session|save-session|propose-apple|serve ...\n\nAll required byte hashes, source inventory, build provenance and platform requirements are in manifest.json. Content hashes identify the exact artifact; they do not establish publisher authentication.\n`;
 await writeFile(join(directory, "README.md"), readme);
 const files = [...executablePaths, "README.md"];
 const rows = await Promise.all(files.sort().map(async path => { const bytes = await readFile(join(directory, path)); return { path, bytes: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") }; }));
 const evaluator = await readFile(join(root, "src/algal_expr.wasm"));
 if ((await sourceSnapshot()).sha256 !== source.sha256) throw new Error("Package sources changed during assembly; keep this partial artifact and rebuild into a fresh output directory");
-const manifest = { contract: "algal.triage-package.v1", platform: "macos-arm64", hostRuntime: "embedded-bun", renderer: "ratatui-tui", minimumMacOS: "14.0", appleInferenceBundled: native !== null, inferenceMinimumMacOS: native ? "26.0" : null, networkFallback: false, signing: "unsigned", evaluatorSha256: createHash("sha256").update(evaluator).digest("hex"), provenance, files: rows };
+const manifest = { contract: "algal.triage-package.v1", platform: "macos-arm64", hostRuntime: "embedded-bun", renderer: "cli-and-served-web", minimumMacOS: "14.0", appleInferenceBundled: native !== null, inferenceMinimumMacOS: native ? "26.0" : null, networkFallback: false, signing: "unsigned", evaluatorSha256: createHash("sha256").update(evaluator).digest("hex"), provenance, files: rows };
 await writeFile(join(directory, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
 await command(["/usr/bin/tar", "-czf", join(output, `${label}.tar.gz`), "-C", output, label]);
 console.log(JSON.stringify({ directory, archive: join(output, `${label}.tar.gz`), sourceSha256: source.sha256, manifest: join(directory, "manifest.json"), archiveBytes: (await stat(join(output, `${label}.tar.gz`))).size }));

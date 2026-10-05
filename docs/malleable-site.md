@@ -129,7 +129,7 @@ or navigation contract.
 
 The site build emits the starting [revision](/living/initial.json), [signals](/living/signals.json), [semantic view](/living/view.json), [manifest](/living/manifest.json), [portable bundle](/living/bundle.json) and [replay-verified receipt](/living/receipt.json). These files describe the starting example, not later unexported browser edits.
 
-The renderer spike under `examples/malleable-site/renderers/` consumes the same semantic tree. Its results distinguish a web renderer, a desktop WebView and a terminal presentation. Renderer compatibility does not imply identical pixels, full native widgets or general interactive application portability.
+Earlier renderer spikes under `examples/malleable-site/renderers/` (web, desktop WebView and terminal) were removed after the feasibility measurements concluded; the git history retains them. Renderer compatibility does not imply identical pixels, full native widgets or general interactive application portability.
 
 ## Scope
 

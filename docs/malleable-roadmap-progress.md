@@ -176,8 +176,9 @@ and session drafts remain separate, with explicit stale-head rebase and conflict
 The profile is bounded to 32 tasks and 128 states; forks copy no mutable custody,
 dispatch ledger or external authority. The package is ad-hoc signed, not notarized.
 
-[Renderer measurements](../examples/local-triage/renderers/performance/README.md)
-use budgets declared before execution. The embed passed nine checks: 95,438 gzip
+The 2026-09-23 renderer measurements (removed with the renderer experiments;
+the git history retains `examples/local-triage/renderers/performance/`)
+used budgets declared before execution. The embed passed nine checks: 95,438 gzip
 bytes, 40.8 ms local cold readiness p95, 0.2 ms synchronous update p95, 772,676
 bytes retained JS growth after 1,000 revision swaps and 100 mount cycles, zero DOM
 growth and no measured host interference. Packaged host capture and TUI snapshot

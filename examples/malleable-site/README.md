@@ -6,5 +6,6 @@ model proposals, browser embedding and evidence boundaries. Run
 root to begin. The live browser demonstration is at
 [algal.computer/living](https://algal.computer/living/).
 
-The [renderer experiment](renderers/README.md) consumes the exact same semantic
-view in Dioxus web/desktop and Ratatui. It remains an isolated feasibility spike.
+An earlier renderer experiment consumed the exact same semantic view in Dioxus
+web/desktop and Ratatui. The spike concluded and the adapters were removed; the
+git history retains the record.
