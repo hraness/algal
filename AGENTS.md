@@ -206,6 +206,14 @@
   bindings, refusal codes and counters. This is not live or semantic-quality
   evidence. Keep the host registry and current-access resolver out of an
   agent-facing interface.
+- Optional summary maintenance lives in `src/context-summary.ts` and uses
+  the existing `ProcessSupervisor` and concrete `HabitatAccount`. Never use
+  `HabitatAccount.admit` for uncertain jobs: its unreceipted-error path releases
+  the allowance. Focused coverage is `bun test src/context-summary.test.ts`;
+  `bun scripts/context-summary-parity.ts` checks frozen record identities and
+  portable complete/failed evidence against the built native CLI and history
+  example. The native evidence verifier requires a regular JSON file, not
+  `/dev/stdin`; temporary fixtures must be task-owned and cleaned up.
 - On mixed Homebrew/rustup hosts, verify `cargo clippy --version` against
   `rustc --version`. `rustup run` can still resolve Homebrew's external Cargo
   subcommand. Prefix the check process with the selected rustup bin directory:

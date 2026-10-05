@@ -778,15 +778,52 @@ impl<'a, F: FnMut(&ContextHistory, &str) -> Result<ContextHistoryCurrent>>
         }
     }
     pub fn use_generation(&mut self, reference: &ContextHistoryRef, input: &Value) -> Result<()> {
+        self.replace_generation(reference, input, None)
+    }
+    pub fn publish_generation(
+        &mut self,
+        reference: &ContextHistoryRef,
+        input: &Value,
+        expected_generation: &str,
+    ) -> Result<()> {
+        check_digest(expected_generation)?;
+        self.replace_generation(reference, input, Some(expected_generation))
+    }
+    fn replace_generation(
+        &mut self,
+        reference: &ContextHistoryRef,
+        input: &Value,
+        expected: Option<&str>,
+    ) -> Result<()> {
         let value = self.registered(reference)?;
         let catalog = self.catalogs[&value.history].clone();
         let (generation, summaries) = derivatives(&catalog.history, Some(input))?;
         let current = hash(&self.current(&catalog, reference, &value.grant, None)?)?;
         self.registered(reference)?;
-        if hash(&self.current(&catalog, reference, &value.grant, None)?)? != current {
+        let again = self.current(&catalog, reference, &value.grant, None)?;
+        if hash(&again)? != current {
             return Err(denied());
         }
         self.registered(reference)?;
+        if let Some(expected) = expected {
+            if hash(&catalog.generation)? != hash(&generation)?
+                && (hash(&catalog.generation)? != expected
+                    || generation["generation"].as_u64().unwrap()
+                        != catalog.generation["generation"].as_u64().unwrap() + 1)
+            {
+                return Err(denied());
+            }
+            let invalidated = again.invalidated.into_iter().collect::<BTreeSet<_>>();
+            for node in summaries.keys() {
+                let range = Self::lookup(&catalog, node)?;
+                if catalog.history.leaves[range.start..range.end]
+                    .iter()
+                    .any(|leaf| invalidated.contains(&leaf.source_index))
+                {
+                    return Err(denied());
+                }
+            }
+        }
         let catalog = self.catalogs.get_mut(&value.history).unwrap();
         catalog.generation = generation;
         catalog.summaries = summaries;
@@ -2013,6 +2050,76 @@ mod tests {
                 .unwrap_err()
                 .code,
             "STORE_MISS"
+        );
+    }
+    #[test]
+    fn conditional_generation_publication_advances_once_and_preserves_conflicts() {
+        let (store, history, current) = fixture(8);
+        let mut host = host(&store, Rc::clone(&current));
+        let reference = host
+            .admit(&serde_json::to_value(&history).unwrap(), None, None, None)
+            .unwrap();
+        let before = host.inspect(&reference, None).unwrap()["generation"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let mut next = json!({"generation":{
+            "schema":"algal.context-history-generation.v1","history":hash(&history).unwrap(),
+            "generation":1,"prompt":hash(&json!("prompt")).unwrap(),
+            "policy":hash(&json!("policy")).unwrap(),"summarizer":hash(&json!("scripted")).unwrap(),
+            "summaries":[]},"nodes":[],"summaries":[]});
+        assert_eq!(
+            host.publish_generation(&reference, &next, &hash(&json!("unobserved")).unwrap())
+                .unwrap_err()
+                .code,
+            "CAPABILITY_DENIED"
+        );
+        assert_eq!(
+            host.inspect(&reference, None).unwrap()["generation"],
+            before
+        );
+        for generation in [0, 2, 4095] {
+            next["generation"]["generation"] = json!(generation);
+            assert_eq!(
+                host.publish_generation(&reference, &next, &before)
+                    .unwrap_err()
+                    .code,
+                "CAPABILITY_DENIED"
+            );
+        }
+        next["generation"]["generation"] = json!(1);
+        host.publish_generation(&reference, &next, &before).unwrap();
+        let published = hash(&next["generation"]).unwrap();
+        assert_eq!(
+            host.inspect(&reference, None).unwrap()["generation"],
+            published
+        );
+        host.publish_generation(&reference, &next, &before).unwrap();
+        let first = next.clone();
+        next["generation"]["policy"] = json!(hash(&json!("different policy")).unwrap());
+        assert_eq!(
+            host.publish_generation(&reference, &next, &published)
+                .unwrap_err()
+                .code,
+            "CAPABILITY_DENIED"
+        );
+        next["generation"]["generation"] = json!(2);
+        assert_eq!(
+            host.publish_generation(&reference, &next, &before)
+                .unwrap_err()
+                .code,
+            "CAPABILITY_DENIED"
+        );
+        assert_eq!(
+            host.inspect(&reference, None).unwrap()["generation"],
+            published
+        );
+        current.borrow_mut().access["state"] = json!("revoked");
+        assert_eq!(
+            host.publish_generation(&reference, &first, &before)
+                .unwrap_err()
+                .code,
+            "CAPABILITY_DENIED"
         );
     }
     #[test]

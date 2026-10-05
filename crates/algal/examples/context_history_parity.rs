@@ -6,7 +6,11 @@ use algal::{
         ContextHistoryCurrent, ContextHistoryHost, ContextHistoryRange, capture_context_history,
         context_history_cover,
     },
-    context_history_contract::{ContextHistory, context_history_digest, context_history_node},
+    context_history_contract::{
+        ContextHistory, context_history_digest, context_history_node,
+        validate_context_history_generation, validate_context_history_queue,
+        validate_context_history_summary_request, validate_context_history_summary_result,
+    },
     contract::{integer, keys, list},
     store::Store,
 };
@@ -149,7 +153,13 @@ fn run_case(input: &Value, item: &Value) -> Result<Value> {
                     }
                     Ok(value)
                 }
-                "inspect" => host.inspect(&reference, Some(&cancelled)),
+                "inspect" => {
+                    let value = host.inspect(&reference, Some(&cancelled))?;
+                    if let Some(save) = operation["save"].as_str() {
+                        saved.insert(save.to_owned(), value.clone());
+                    }
+                    Ok(value)
+                }
                 "read" => host.read(
                     &reference,
                     integer(&operation["index"], 0, 1023)?,
@@ -176,18 +186,18 @@ fn run_case(input: &Value, item: &Value) -> Result<Value> {
                     }
                     host.search(&reference, &options, limits, Some(&cancelled))
                 }
-                "expand" => {
-                    let node = context_history_node(
-                        &serde_json::to_value(&history)?,
-                        integer(&operation["start"], 0, 1023)?,
-                        integer(&operation["end"], 1, 1024)?,
-                    )?;
-                    host.expand(
-                        &reference,
-                        &context_history_digest(&serde_json::to_value(node)?)?,
-                        limits,
-                        Some(&cancelled),
-                    )
+                "expand" | "expand-unknown" => {
+                    let id = if operation["op"] == "expand-unknown" {
+                        digest(&json!("unadmitted source node"))?
+                    } else {
+                        let node = context_history_node(
+                            &serde_json::to_value(&history)?,
+                            integer(&operation["start"], 0, 1023)?,
+                            integer(&operation["end"], 1, 1024)?,
+                        )?;
+                        context_history_digest(&serde_json::to_value(node)?)?
+                    };
+                    host.expand(&reference, &id, limits, Some(&cancelled))
                 }
                 "delegate" => {
                     let picked = list(&operation["indices"], 1024)?
@@ -228,20 +238,38 @@ fn run_case(input: &Value, item: &Value) -> Result<Value> {
                     Ok(Value::Null)
                 }
                 "validate" => {
+                    let mut cursor = operation["after"]
+                        .as_str()
+                        .map(|after| {
+                            saved
+                                .get(after)
+                                .ok_or_else(|| Error::invalid("unknown cursor page"))
+                                .map(|page| page["cursor"].clone())
+                        })
+                        .transpose()?;
+                    if let (Some(cursor), Some(index)) = (cursor.as_mut(), operation.get("index")) {
+                        cursor["offset"] = json!(integer(index, 0, 1024)?);
+                    }
                     host.validate_view(
                         &reference,
                         saved
                             .get(operation["saved"].as_str().unwrap_or_default())
                             .ok_or_else(|| Error::invalid("unknown saved page"))?,
-                        None,
+                        cursor.as_ref(),
                     )?;
                     Ok(Value::Null)
                 }
-                "generation" => {
-                    host.use_generation(
-                        &reference,
-                        &derivatives(&history, operation, &input["recipe"])?,
-                    )?;
+                "generation" | "publish" => {
+                    let pool = derivatives(&history, operation, &input["recipe"])?;
+                    if operation["op"] == "publish" {
+                        let expected = saved
+                            .get(operation["after"].as_str().unwrap_or_default())
+                            .and_then(|page| page["generation"].as_str())
+                            .ok_or_else(|| Error::invalid("unknown saved generation"))?;
+                        host.publish_generation(&reference, &pool, expected)?;
+                    } else {
+                        host.use_generation(&reference, &pool)?;
+                    }
                     Ok(Value::Null)
                 }
                 "current" => {
@@ -269,6 +297,68 @@ fn run_case(input: &Value, item: &Value) -> Result<Value> {
     }
     Ok(json!({"name":item["name"],"history":history,"ref":refs["root"],"results":results}))
 }
+fn summary_job(value: &Value) -> Result<Value> {
+    keys(
+        value,
+        &[
+            "history",
+            "node",
+            "request",
+            "queue",
+            "result",
+            "summary",
+            "generation",
+            "nodes",
+        ],
+    )?;
+    let summary = value.get("summary").filter(|summary| !summary.is_null());
+    let summaries = summary.map_or_else(|| json!([]), |summary| json!([summary]));
+    validate_context_history_summary_request(
+        &value["history"],
+        &value["node"],
+        &value["request"],
+        &json!([]),
+    )?;
+    validate_context_history_queue(
+        &value["history"],
+        &value["queue"],
+        &json!([value["request"]]),
+    )?;
+    validate_context_history_summary_result(&value["request"], &value["result"], summary)?;
+    validate_context_history_generation(
+        &value["history"],
+        &value["generation"],
+        &value["nodes"],
+        &summaries,
+    )?;
+    if value["result"]["status"] == "complete"
+        && value["request"]["generation"] != value["generation"]["generation"]
+    {
+        return Err(Error::invalid(
+            "summary completion generation differs from request",
+        ));
+    }
+    let mut result = serde_json::Map::new();
+    for field in [
+        "history",
+        "node",
+        "request",
+        "queue",
+        "result",
+        "generation",
+    ] {
+        result.insert(
+            field.to_owned(),
+            json!(context_history_digest(&value[field])?),
+        );
+    }
+    let summary_digest = match summary {
+        Some(summary) => json!(context_history_digest(summary)?),
+        None => Value::Null,
+    };
+    result.insert("summary".to_owned(), summary_digest);
+    Ok(Value::Object(result))
+}
 fn run() -> Result<()> {
     let mut bytes = Vec::new();
     std::io::stdin()
@@ -278,6 +368,18 @@ fn run() -> Result<()> {
         return Err(Error::limit("history parity input bytes"));
     }
     let input: Value = serde_json::from_slice(&bytes)?;
+    if let Some(jobs) = input.get("summaryJobs") {
+        keys(&input, &["summaryJobs"])?;
+        let results = list(jobs, 32)?
+            .iter()
+            .map(|job| match summary_job(job) {
+                Ok(value) => json!({"ok":true,"value":value}),
+                Err(error) => json!({"ok":false,"code":error.code}),
+            })
+            .collect::<Vec<_>>();
+        std::io::stdout().write_all(canonical(&json!({"summaryJobs":results}))?.as_bytes())?;
+        return Ok(());
+    }
     keys(
         &input,
         &[

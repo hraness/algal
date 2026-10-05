@@ -17,8 +17,11 @@ All implementation phases below are **Not started**.
 
 Source-preserving memory is a separate, related increment. The optional
 [progressive reader](../spec/v1/context-history.md) is implemented in Bun and Rust
-and leaves existing context behavior unchanged by default. Recorded summary
-maintenance, consumer adapters, and longitudinal evaluation remain planned.
+and leaves existing context behavior unchanged by default. Optional
+[recorded summary jobs](../spec/v1/context-history.md#explicit-summary-jobs)
+reuse its process journal and work account, with portable offline verification
+and conditional publication. Consumer adapters and longitudinal evaluation
+remain planned; neither the reader nor the job driver enables them by default.
 The [scoped-memory direction](north-star.md#scoped-memory-and-progressive-context)
 tracks that work; its reader foundation does not complete C0 through C4 below.
 
