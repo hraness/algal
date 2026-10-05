@@ -116,7 +116,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.13.0",
-    "@hraness/design-kit": "github:hraness/design-kit#v0.36.3",
+    "@hraness/design-kit": "github:hraness/design-kit#v0.41.0",
     "@hraness/desktop-foundation": "https://github.com/hraness/desktop-foundation/releases/download/v0.8.0/hraness-desktop-foundation-0.8.0.tgz",
     "@hraness/posthog": "https://github.com/hraness/posthog/releases/download/v0.3.11/hraness-posthog-0.3.11.tgz",
     "@hraness/ui": "github:hraness/ui#v0.5.18",
