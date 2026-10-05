@@ -371,7 +371,19 @@ of competing to be the one best procedure. ALGAL's manifests and evidence
 contracts are components of that possibility. A public ecosystem, portable
 trust, and automatic cross-domain transfer do not exist yet.
 
-Across all three, the shift is the same: software development becomes partly
+**Funded autonomous projects and businesses.** An owner, investor, or sponsor
+could give a habitat a purpose and an initial allocation of money, model tokens,
+compute, storage, or service usage. The habitat would spend a permitted portion
+developing reusable procedures, use them to perform work, and seek further
+backing when appropriate. Customer revenue could replenish resources, but an
+internal service or research project would not need to sell anything. Permission
+to use a service and an allowance to consume it remain separate. Different
+resources retain their own units, expiry, and restrictions; an estimated cash
+value does not make them interchangeable. The [north-star resource model](north-star.md#resource-endowed-habitats)
+and [Cloud's proposed direction](https://github.com/hraness/algal-cloud/blob/main/docs/north-star.md)
+define the host responsibilities and comparative tests for this extension.
+
+Across these uses, the shift is the same: software development becomes partly
 the design of environments in which procedures are discovered, tested,
 retained, and governed. Human engineering does not disappear. More of its
 effort moves toward defining interfaces, constraints, evaluators, and the

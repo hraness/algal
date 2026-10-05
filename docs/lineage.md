@@ -187,6 +187,37 @@ grants, recorded model effects, applicability checks, and total budgets remain
 its own requirements; the OptMem installer and global instruction block are not
 part of the integration.
 
+## Temper: contract-first behavior
+
+[Temper](https://github.com/nerdsane/temper/tree/1be4b7be003f35bdacfbc24f7f4eb7e77bdade48)
+is a policy-driven runtime in which agents describe application behavior as
+state machines, data contracts, policies, and sandboxed modules. The source
+reviewed on 2026-10-04 informs a proposed ALGAL direction, not a new dependency
+or evidence that ALGAL has implemented Temper's mechanisms.
+
+Its [verification-hardening decision](https://github.com/nerdsane/temper/blob/1be4b7be003f35bdacfbc24f7f4eb7e77bdade48/docs/adrs/0016-verification-cascade-hardening.md)
+identifies a concrete failure mode: a checker can silently accept assertions
+that its classifier does not understand, even when a runtime parser understands
+more. The decision calls for a shared parser, explicit unverifiable assertions,
+and minimized counterexamples. ALGAL should require checker/runtime agreement
+and keep unsupported properties unresolved. More verification layers do not
+repair a disagreement about the property being checked.
+
+Temper's [composite verifier](https://github.com/nerdsane/temper/blob/1be4b7be003f35bdacfbc24f7f4eb7e77bdade48/crates/temper-verify/src/composite/verify.rs)
+checks joint entity state and distinguishes verified, violated, and incomplete
+exploration. That distinction is useful for ALGAL's process, resource, and
+revision invariants. Its [shadow testing](https://github.com/nerdsane/temper/blob/1be4b7be003f35bdacfbc24f7f4eb7e77bdade48/crates/temper-jit/src/shadow.rs)
+compares two transition tables on supplied cases. Such comparisons expose
+revision differences on those cases; they do not establish unrestricted
+observational equivalence or authorize new live effects.
+
+The [ALGAL north star](north-star.md#contract-first-behavior-and-verification)
+selects executable contracts, typed host policy, staged verification, composite
+checks, shadow revisions, and recorded improvement decisions. ALGAL would
+express them through its existing manifests, applications, effects, and
+foundry evidence. Temper's CSDL/OData interface, Cedar stack, actor backend,
+and proof-tool selection are not required parts of that adoption.
+
 ## Research precedents
 
 The claim that nobody has thought of evolving AI programs would not survive
