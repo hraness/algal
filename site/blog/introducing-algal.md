@@ -5,7 +5,7 @@ date: 2026-09-29
 description: Language and VM for agent programs that wait for approval and resume.
 eyebrow: Launch
 cardDescription: "ALGAL runs agent programs that stop for your yes, survive a crash, and replay what they did."
-updated: 2026-10-01
+updated: 2026-10-05
 ---
 
 # Introducing ALGAL

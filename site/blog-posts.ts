@@ -209,7 +209,7 @@ export const BLOG_ADMISSIONS: readonly ArticleAdmission[] = [
     "href": "/blog/built-on-algal/",
     "lifecycle": "indexable",
     "readerJob": "Find which Hraness products run on ALGAL and open the post that shows how each one uses it.",
-    "nonObviousAnswer": "ALGAL is in use outside its own repo: TextButler gates per-contact reply plans with it, Excalibur (xcb) replays task history through it, Clankdar computes puzzle answers with its pinned evaluator, and SlopCamera bakes character behavior as tool-free organisms.",
+    "nonObviousAnswer": "ALGAL is in use outside its own repo: TextButler gates per-contact reply plans with it and Excalibur (xcb) replays task history through it.",
     "originalContribution": "An index of registered relations; each entry is the relation's reviewed sentence and one link.",
     "hostFit": "The provider hub for ALGAL, on ALGAL's own site.",
     "nearestUrls": [
@@ -243,20 +243,10 @@ export const BLOG_ADMISSIONS: readonly ArticleAdmission[] = [
         "title": "Excalibur (xcb) reflexes",
         "url": "https://github.com/hraness/xcb/blob/6437bcb844017e74b3e3930ff5c6076ea55c5f06/docs/reflexes.md",
         "checkedOn": "2026-09-24"
-      },
-      {
-        "title": "Clankdar evaluator section",
-        "url": "https://github.com/hraness/clankdar/blob/664d64e4ce4c429ee999f914d054facf6dcbb8d9/README.md",
-        "checkedOn": "2026-09-24"
-      },
-      {
-        "title": "SlopCamera behavior bake",
-        "url": "https://github.com/hraness/slopcamera/blob/7e7027521f134aaaaa8404efebdc5bac24be6252/src/spatial-scene/behavior-bake.ts",
-        "checkedOn": "2026-09-24"
       }
     ],
     "observations": [
-      "The rendered hub contains one entry for each live registered consumer: TextButler, Excalibur (xcb), Clankdar and SlopCamera. ALGAL consuming another product is excluded.",
+      "The rendered hub contains one entry for each live registered consumer: TextButler and Excalibur (xcb). ALGAL consuming another product is excluded.",
       "These integrations divide into full runtime embedding, expression-only evaluation and effect-free behavior baking; sharing a dependency does not imply the same execution model."
     ],
     "scores": {
@@ -282,7 +272,7 @@ export const BLOG_ADMISSIONS: readonly ArticleAdmission[] = [
       "The @hraness/design-kit/portfolio subpath regenerating with ALGAL relations",
       "Any linked 'How <product> uses ALGAL' post going live, moving or being archived",
       "An ALGAL release or status change in site/copy.ts",
-      "A rename of ALGAL or of TextButler, Excalibur (xcb), Clankdar or SlopCamera"
+      "A rename of ALGAL or of TextButler or Excalibur (xcb)"
     ]
   },
   {
@@ -559,6 +549,4 @@ export const PENDING_CROSS_HOST_LINKS: ReadonlySet<string> = new Set([]);
 export const ALGAL_USES_POSTS: Readonly<Record<string, Readonly<{ url: string; live: boolean }>>> = {
   "message-like-me": { url: "https://textbutler.app/blog/how-textbutler-uses-algal", live: true },
   xcb: { url: "https://xcb.sh/blog/how-xcb-uses-algal", live: true },
-  clankdar: { url: "https://clankdar.com/blog/how-clankdar-uses-algal", live: true },
-  slopcamera: { url: "https://slopcamera.com/blog/how-slopcamera-uses-algal", live: true },
 };

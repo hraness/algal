@@ -55,7 +55,7 @@ test("only indexable posts reach the index, feed, sitemap, and llms.txt", () => 
   const feed = blogAtomFeed(posts);
   const llms = blogLlmsList(posts);
   const sitemap = blogSitemapEntries(posts);
-  expect(sitemap).toEqual(["/blog/", ...indexable].map(path => ({ path, lastModified: "2026-10-01" })));
+  expect(sitemap).toEqual(["/blog/", ...indexable].map(path => ({ path, lastModified: "2026-10-05" })));
   for (const post of posts) {
     const listed = post.indexable;
     expect(index.includes(`href="${post.path}"`)).toBe(listed);
@@ -66,10 +66,10 @@ test("only indexable posts reach the index, feed, sitemap, and llms.txt", () => 
 
 test("reading pages hide dates while discovery records accurate revisions", () => {
   for (const post of posts) {
-    expect(post.updated).toBe("2026-10-01");
+    expect(post.updated).toBe("2026-10-05");
     expect(renderPostArticle(post)).not.toContain("<time");
     expect(renderPostArticle(post)).not.toContain(">Checked ");
-    expect(JSON.stringify(postJsonLd(post))).toContain('"dateModified":"2026-10-01T00:00:00.000Z"');
+    expect(JSON.stringify(postJsonLd(post))).toContain('"dateModified":"2026-10-05T00:00:00.000Z"');
   }
   expect(renderBlogIndex(posts)).not.toContain("<time");
 });
