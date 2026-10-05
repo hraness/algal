@@ -1,6 +1,8 @@
 # ALGAL north star: a portable runtime for evolving habitats
 
-Status: proposed architecture and delivery plan, 2026-10-01.
+Status: proposed architecture and delivery plan, 2026-10-01. Contract-first
+behavior, resource endowments, and their hill-climbing criteria revised
+2026-10-04. These additions do not activate a new runtime or funding contract.
 
 This document is the planning authority for the next ALGAL runtime direction. It
 turns the existing vision of software that accumulates competence into a set of
@@ -47,6 +49,20 @@ The first implementation milestone is not a distributed BEAM replacement. It is
 a small actor/event laboratory that demonstrates the same behavior in the Bun
 reference runtime, the Rust kernel and a hosted habitat, with exact traces and
 measured authoring and execution costs.
+
+A habitat should be able to receive a mandate and a **resource endowment**:
+allocations of money, model tokens, provider credits, compute, storage, or
+sponsored service usage. It can invest some of those resources in developing
+procedures and use the rest to operate them. Owners, investors, sponsors, and
+customers are different sources of backing; earning revenue is optional. The
+host supplies and enforces allocations. ALGAL supplies portable requirements,
+limited execution, and evidence, without becoming a payment processor.
+
+The outcome metric is useful accepted work under a fixed total resource
+allocation, including the cost of acquiring and maintaining procedures.
+Verified iteration time remains the leading developer-loop metric. A faster
+loop is valuable when it makes tested improvements cheaper to produce; neither
+a bigger balance nor more generated programs establishes improvement.
 
 The long-term unit of progress is an ecology, not an agent count. An organism
 is a bounded executable procedure; an agent is a durable process using one or
@@ -139,6 +155,156 @@ identity.
 Bun is the iteration reference. Rust is the native kernel. WASM is a portability
 artifact. Cloudflare is a hosted habitat. Browsers, terminals, desktop apps and
 local bridges are hosts. None should define a separate language semantics.
+
+## Contract-first behavior and verification
+
+[Temper](lineage.md#temper-contract-first-behavior) is a reference for joining
+state machines, policy, verification, and revision testing. ALGAL should adopt
+the following mechanisms through its existing application, expression, effect,
+and host contracts:
+
+| Mechanism | ALGAL requirement |
+| --- | --- |
+| Executable state-machine contracts | One versioned interpretation of states, events, guards, completion predicates, and declared effects drives checking and execution. Unsupported predicates are explicit unresolved results, never implicit passes. |
+| Typed policy and assigned identity | The host supplies the acting principal, permission scope, and policy revision. Model text cannot assign its own role, sponsor, or spending authority. |
+| Verification cascade | Cheap structural checks precede generated histories, reference-model comparison, and fault tests. Each result names which properties and state space it covered. |
+| Composite invariants | Check relevant combinations of process, mailbox, revision, and resource state, not only isolated records. A state-space limit produces an incomplete result. |
+| Shadow revision testing | Compare incumbent and candidate on identical captured events and sealed effect results without repeating live effects. A passing corpus is not universal equivalence. |
+| Evolution records and repair feedback | Retain the observation, hypothesis, candidate, counterexample, evaluation cost, decision, and later outcome in existing lineage records. |
+
+The first implementation should exercise a small transition contract using
+`algal.expr.v1` and current application/process records before enlarging the
+source language. Checkers, runtime decisions, and explanations must share
+parsed predicates or demonstrate correspondence with the same fixtures.
+Diagnostics identify the rejected transition, source location where available,
+policy or resource condition, and a minimized reproducer. A repair proposal
+cannot make itself valid by weakening the failed condition.
+
+Do not import Temper's CSDL/OData interface, Cedar policy stack, actor backend,
+or verification tools wholesale. ALGAL keeps data-only manifests and one
+semantic core. Cloud keeps its scoped TLA+/Lean work and implementation tests.
+The transferable lesson is correspondence between a contract, its checks, and
+its execution, rather than the number of proof tools in the build.
+
+## Resource-endowed habitats
+
+This is a proposed extension of host requirements and work accounting, not a
+claim that the current `algal.habitat-budget.v1` record is a general wallet.
+That record accounts for deterministic work, attempts, and runs. Financial
+balances, provider usage, expiry observations, and storage billing belong to
+hosts and separately recorded evidence. Historical parsers, receipts, and
+budget semantics must remain readable under their original versions.
+
+### Funding, permission, and usage are different facts
+
+A habitat needs a host-defined mandate: its purpose, acceptance conditions,
+permissions, resource policy, and rules for replacing a procedure. Backing can
+arrive before any work, recur on a schedule, depend on a milestone, or come from
+customers. A company-sponsored research habitat and a seed-funded business use
+the same execution model; only the host's resource sources and objectives vary.
+
+| Concept | Responsibility |
+| --- | --- |
+| Capability | Permission to perform a specified effect; a resource allowance does not grant it. |
+| Allocation | A host-issued allowance for a named resource, source, scope, unit, purpose, and validity period; a credential is not proof that the allowance exists. |
+| Requirement and reservation | Resources needed by one selected execution route, reserved before its effect can start. |
+| Usage and settlement evidence | What was observed, what was charged or released, and what remains unknown, bound to the original operation and allocation. |
+| Resource policy | Who may allocate, renew, convert, revoke, or move resources, and which work must remain funded. The candidate cannot edit it. |
+
+An endowment is a portfolio of non-fungible allowances. Model tokens are tied to
+a provider/model and relevant input/output classes; calls, CPU time, storage over
+time, currency, and concurrent capacity retain their own units. Available money
+cannot silently substitute for an expired tool grant. A quoted conversion is a
+separate authorized host effect. Dollar equivalents can support planning but
+cannot create spendable resources.
+
+The portable boundary describes requirements, allocation references, refusal
+reasons, and recorded outcomes. Hosts validate backing, identity, current time,
+revocation, and provider limits. Time and external observations enter as recorded
+inputs; tariffs, credentials, and wall-clock measurements do not enter pure
+execution receipts. Host observations do not acquire external truth merely by
+being hashed or replayed.
+
+### Investment and operation share an account, not a free allowance
+
+Resource purpose is independent of resource type:
+
+- **Build:** acquire procedures, synthesize candidates, run evaluations, and
+  prepare reusable artifacts. This is the capex analogue, not a claim about
+  financial asset recognition.
+- **Operate:** perform accepted work and maintain the state and services it needs.
+- **Protect:** reconcile started work, retain required evidence, handle existing
+  obligations, and pause or export safely.
+
+Candidate generation, failed trials, evaluation, memory maintenance, and
+migration consume the same declared total allocation as later execution. A
+procedure cannot fund its own search by taking resources reserved for accepted
+work. Seed funding and follow-on grants remain distinguishable from revenue.
+The runtime does not require equity instruments, transferable tokens, a
+marketplace, or a profitability objective.
+
+### Admission and continuation
+
+A route may start only when its permissions and each required resource match a
+current allocation. One missing dimension produces a named refusal or an
+explicitly permitted alternative; it does not mean every activity must stop.
+Only the host may release new funding after a milestone. A candidate's claim
+that the milestone passed is insufficient.
+
+Use short transitions to prepare an effect, checkpoint its continuation, and
+later consume its recorded result. Bind the operation to the input, procedure,
+policy, route, and allocation revisions. A duplicate result cannot spend twice;
+an expired or revoked grant blocks new dispatch without erasing obligations
+from earlier dispatch. An uncertain outcome keeps its operation and unresolved
+reservation until reconciliation. Pausing a process never proves cancellation
+at the provider. A late result must still reconcile its original resource
+obligation after revocation or a procedure change, even when a stale continuation
+is forbidden from publishing into the new program state.
+
+A hard resource ceiling must identify its enforcement mechanism. A usage estimate
+or a shared external subscription is not such a ceiling. Hosts must record
+unexpected charges and exposure rather than clip the observation to a budget.
+This does not weaken a current contract that only accepts charges within its
+reservation: richer host evidence needs an explicit compatible representation
+or a versioned extension, with cross-runtime tests.
+
+### Hosted work must fund its host
+
+A hosted route requires a hosting allocation independently of its model/tool
+allowances. Deterministic work, cache hits, evidence retention, and recovery can
+cost the host resources even when no provider tokens are billed. An external
+token grant cannot settle those hosting charges. The host binds a named payer,
+backed allowance, accepted price/charge limit, and retention term to the work;
+those financial records remain outside pure execution receipts.
+
+Reserve hosting and protected completion capacity before admission. Stop new
+unfunded work without discarding already incurred obligations. A host records
+actual overruns separately from the customer's permitted charge; a bug or
+unapproved retry cannot enlarge that charge. Existing provider settlement
+contracts retain their own rules. Local ALGAL use does not require a paid account.
+
+Cloud's [cost-recovery gate](https://github.com/hraness/algal-cloud/blob/main/docs/north-star.md#cost-recovery-acceptance-gate)
+and [execution plan](https://github.com/hraness/algal-cloud/blob/main/docs/hosting-cost-recovery-plan.md)
+require earned and collected hosting charges to cover attributed expenses and
+the declared margin, or identify a bounded subsidy. Unused seed deposits,
+provider pass-through, and internally issued credit do not prove hosting
+revenue. Compare underlying resource use separately from customer charges;
+raising a tariff is not an execution improvement. ALGAL supplies portable
+requirements and refusal/effect identities, not Cloud's pricing or collection.
+
+### Ownership across the projects
+
+ALGAL owns pure transition semantics, resource requirement/refusal shapes where
+portable, effect identity, suspension, replay, and evaluation. It stays useful
+without Cloud or a money balance. XCB, Ghostget, and other host adapters keep
+credential ownership and service-specific execution.
+
+[Cloud's north star](https://github.com/hraness/algal-cloud/blob/main/docs/north-star.md)
+owns funding sources, durable allocations, platform pricing, source-pool
+conservation, payment reversals, retention, and Cloudflare cost measurement.
+Every shared contract change joins through immutable dependency pins and
+consumer tests. No repository may independently invent a second resource or
+continuation protocol under the same version.
 
 ## A compact semantic model
 
@@ -273,14 +439,25 @@ the seed for behavior revision and migration.
 ### Cloud habitat
 
 `algal-cloud` should remain a hosted host, not a second ALGAL implementation.
-Its Durable Object is a serialized habitat node. The cloud protocol should expose
-actor deployment, event ingress, mailbox delivery, scheduling, state/CAS,
-metering, evidence export and behavior activation through the same contracts as
-the local node.
+The initial ownership model is one serialized Durable Object per habitat, with
+short state and resource transitions. Slow provider work should be eligible for
+a durable handoff to an effect Worker, allowing the object to become idle until
+a result arrives. Queue delivery is a notification; the operation journal is
+the authority for dispatch and reconciliation. Moving a fetch into a Worker
+while the object awaits it does not create this separation.
 
-The existing broker remains an executor boundary. XCB and Ghostget remain
-credential-owning provider/tool systems. The habitat never receives upstream
-provider credentials.
+The cloud protocol should expose event ingress, process continuation,
+state/CAS, resource admission, evidence export, and behavior activation through
+the same portable contracts as the local node. Immutable bulk evidence can use
+separate storage without changing historical digests or tenant access rules.
+Cloud must measure this profile against the simpler inline-DO incumbent before
+making it a default. The language does not require Queues, R2, or Workflows.
+
+The broker remains a privileged executor boundary, while Cloud's funding design
+assigns one authoritative reservation owner for each operation. XCB and Ghostget
+remain credential-owning provider/tool systems. Habitat programs never receive
+upstream provider credentials. Platform hosting needs its own funded allocation
+even when inference or tools are supplied by a sponsor.
 
 ### Scoped memory and progressive context
 
@@ -308,21 +485,25 @@ The reading contract provides:
   or cache rebuilds cannot shift an earlier page;
 - explicit incomplete, unavailable, pending, and insufficient-budget outcomes;
 - pending ranges after derivative invalidation, while historical originals remain
-  separate from current facts. Recorded correction and summary repair work is
-  the next implementation step.
+  separate from current facts. Optional recorded summary jobs preserve that
+  distinction when creating or replacing a derivative.
 
 Source digests identify bytes, not permission. A summary is readable only when
 all contributing sources remain inside the reader's grant. A broad summary cannot
 be delegated to a narrower child by hiding its citations. Current authorization,
 source availability, and logical applicability remain separate checks.
 
-Summary creation is planned as a separate agent effect, not a scheduler
-operation or a side effect of reading. Its job identity includes the source/child digests, scope,
-policy, and summarizer configuration. Record its output and work in the existing
-process/effect machinery; replay reuses the recorded result. Queue depth, merge
-bursts, rebuild work, and aggregate inference all need limits. A missing summary
-must permit a bounded raw view or expose a pending range without compulsory
-model work before the user's task can proceed.
+Optional [summary creation](../spec/v1/context-history.md#explicit-summary-jobs)
+is a separate agent effect, not a scheduler operation or a side effect of reading.
+Its job identity includes the source/child digests, scope, policy, summarizer
+configuration, and existing work-account checkpoint. The process journal records
+its retrieval, output, and work; offline replay reuses the recorded result.
+Interrupted work keeps its reserved allowance until reconciliation, and publication
+checks the expected generation and current permission. Queue depth, merge bursts,
+rebuild work, and aggregate inference have explicit limits. A missing summary
+permits a limited raw view or exposes a pending range without compulsory model
+work before the user's task can proceed. Consumer adapters, later-work comparisons,
+and default activation remain unfinished.
 
 A summary is a navigation aid, not an admitted logical observation or proof of
 world state. Protect original user intent, retain the original admitted text, and
@@ -372,12 +553,13 @@ durability rules:
 - Humans, editors and agents use the same typed operations. Their authority and
   presentation can differ, but they do not get separate mutation semantics.
 
-This gives ALGAL a useful three-way synthesis:
+The design combines these mechanisms:
 
 | Source of inspiration | What ALGAL takes | What ALGAL adds or constrains |
 |---|---|---|
 | BEAM/OTP | processes, mailboxes, supervision, distribution, upgrades | durable evidence, bounded resources and explicit uncertain effects |
 | Live World/Lisp environment | stable identity, live inspection, semantic mutation, capability eventual-send | revision heads, migrations, replay and host-admitted authority |
+| Temper | executable behavior contracts, staged verification, composite checks, shadow revisions | shared predicate semantics, explicit incomplete results, sealed effects, and fixed resource policy |
 | ALGAL today | manifests, receipts, replay, habitats, foundry and application lifecycle | a single actor/event model that joins them |
 
 The first implementation should not attempt a universal live object database. A
@@ -484,6 +666,31 @@ or network effects.
 
 These are local engineering targets. They are not hosted SLOs until qualified by
 `algal-cloud` under its own capacity and failure gates.
+
+### Resource and investment scorecard
+
+Resource-aware work adds the following measurements to the developer and runtime
+scorecards. Accepted work meets the domain's completion and quality conditions;
+an accepted message or completed interpreter slice is not enough. Freeze each
+experiment's resource vector, task horizon, acceptance floors, sample count,
+and minimum useful improvement before running candidates.
+Targets without a measured baseline remain proposed, not green.
+
+| Measure | Required comparison |
+| --- | --- |
+| Useful accepted work | Accepted tasks per fixed allocation, including failures and refusals; report acceptance rate and worst task-family quality beside throughput. |
+| Total resource use | Generation, evaluation, unsuccessful attempts, operation, maintenance, migration, and retention by original unit and funding source. Unknown usage remains unknown. |
+| Investment repayment | Later resource savings or quality gains against fixed-agent, conventional-workflow, fresh-synthesis, and no-library controls over the same horizon. Forecast and observed repayment are separate. |
+| Refusal and repair quality | Wrong-scope, exhausted, expired, revoked, and uncertain cases localize the condition; measure edits to repair without widening permission or funding. |
+| Hosted cost coverage | Payer-backed hosting allowances, actual platform expenses, customer charges/collections, remaining prepaid obligations, and explicit subsidy are reported separately. Cloud owns the cost-recovery gate; provider credits and unused deposits cannot satisfy it. |
+| Continuation cost | Active host time, checkpoint bytes, commits, billing overhead, and recovery effort per completed effect, separated from external waiting time. |
+| Composition safety | Joint histories catch double reservation, stale activation, and missing child obligations; report explored bounds and incomplete checks. |
+
+Do not sum incompatible token, time, storage, currency, and capacity units into
+one score. Compare under identical resource limits or retain a Pareto frontier:
+variants for which no other eligible variant is better in every measured
+dimension. A host may apply a frozen valuation policy to economic comparisons,
+but changing that policy is a separate experiment and never a resource conversion.
 
 ## Ecology progression
 
@@ -915,6 +1122,12 @@ The architecture should be revised if any of these fail:
 - Consumer pilots still need private scheduler or receipt implementations.
 - Behavior evolution improves benchmark scores but makes production diagnosis,
   migration or rollback harder.
+- A resource abstraction makes local execution depend on a payment account,
+  hides non-fungible limits, or duplicates the existing budget and effect model.
+- Claimed investment gains disappear when sponsor resources, failures,
+  evaluation, maintenance, and retention are charged to both study arms.
+- Contract verification and runtime enforcement disagree on supported predicates,
+  or an incomplete composite check is needed to justify activation.
 
 A failed target is useful evidence. It should produce a changed target,
 architectural simplification or explicit non-goal, not silent benchmark removal.
@@ -953,6 +1166,8 @@ These are product invariants, not optional test features:
 | Deterministic execution | Pure cells produce the same result in Bun and Rust. Receipts replay bit for bit; nondeterminism enters only through recorded executor results. |
 | Authority and effects | A manifest cannot mint a capability, widen a port, or approve its own successor. Host effects are typed, idempotent where possible, and explicit about uncertain completion. |
 | Durable lifecycle | Queue delivery, suspension, retry, timer, journal, restart, and recovery preserve the committed prefix and never silently repeat an uncertain effect. |
+| Resource integrity | Permission and funding are checked separately. Units, source scope, purpose, and operation identity survive reservation and reconciliation. Expiry cannot erase earlier obligations; unknown usage cannot become free capacity. |
+| Contract correspondence | Runtime, checker, and diagnostics agree on the supported predicates. Unsupported predicates and incomplete joint-state exploration remain unresolved. |
 | Evaluation integrity | Development, selection, holdout, and frozen cases remain disjoint. Candidate cost, failures, inconclusive results, and maintenance work are retained. |
 | Portability | The reference runtime, native kernel, expression WASM target, and supported adapters agree on canonical values, rejection behavior, and evidence. |
 
@@ -1006,7 +1221,10 @@ candidate.
 1. **State a falsifiable hypothesis.** Name the workload, expected benefit,
    risk, budget, and invariant that could disprove it.
 2. **Freeze the comparison.** Pin the incumbent digest, model and tool
-   versions, task splits, random seeds, environment, and total work budget.
+   versions, task splits, random seeds, environment, and total resource vector.
+   Record the permitted change, task horizon, quality/recovery floors, sampling
+   and uncertainty method, minimum useful improvement, stop rule, and any host
+   pricebook or valuation revision. A sponsor grant is part of the budget.
 3. **Generate bounded variants.** Prefer a small change to routing, procedure
    composition, representation, or resource policy. Keep weaker ancestors when
    they expose useful components or diversity.
@@ -1016,11 +1234,15 @@ candidate.
 5. **Evaluate in stages.** Use development cases for search, a frozen selection
    set for promotion, and an untouched holdout for confirmation. Include a
    no-change control and a fresh-synthesis control with comparable budgets.
-6. **Score eligible candidates.** First require every hard gate. Then compare
-   held-out quality and worst-slice quality, followed by fault survival and
-   recovery, total cost and latency, and finally artifact size and maintenance
-   complexity. Reject a candidate that wins on average by creating a severe tail
-   regression.
+   Do not tune against the confirmation holdout after reading its result;
+   further search needs a new sealed split and a separately recorded experiment.
+6. **Score eligible candidates.** Require every hard gate and the preregistered
+   quality, worst-slice, and recovery floors. Compare useful accepted work under
+   equal resources, then total resource use and latency, and finally artifact
+   size and maintenance complexity. Resource-saving studies hold task quality
+   and recovery within their declared non-regression limits. Reject a candidate
+   that wins on average by creating a severe tail regression or refusing the
+   expensive part of the workload.
 7. **Retain the lineage.** Store the candidate, receipt, tests, costs, failures,
    inconclusive cases, and counterexamples. Keep a small diverse archive rather
    than only the current winner.
@@ -1037,6 +1259,28 @@ The objective is lexicographic: preserve authority, privacy, durability, and
 protocol invariants first; improve successful work under adversarial schedules
 second; reduce latency, memory, and storage third; and reduce code and
 operating complexity fourth. No average score overrides a hard gate.
+
+### Initial contract and resource experiments
+
+These are proposed experiments, not completed phases. They use current
+application/process seams where possible and do not wait for the whole actor
+language or a commercial Cloud launch. The selected implementation gets a
+scoped phase plan with literal checks before code changes; the existing
+[north-star execution plan](north-star-execution.md) remains the consumer
+adoption authority.
+
+| Experiment | Frozen incumbent and smallest challenger | Required evidence and falsifier |
+| --- | --- | --- |
+| A0: contract correspondence | Current application guards versus shared parsed predicates and structured refusal explanations on the same transitions | Matching runtime/checker decisions, unsupported-predicate refusal, a caught known-bad mutation, and fewer repair iterations. Stop if a second policy language is needed for the same checks. |
+| A1: mixed resource requirements | Current work/attempt/run limits versus an additive host-requirement fixture with inference and tool allocations | Bun/Rust agreement on matching, exhaustion, wrong units, expiry, revocation, and uncertainty. A hosted fixture with free inference still requires its independent hosting allowance. Existing budget receipts remain unchanged. Stop if the pure kernel must manage provider accounts or credentials. |
+| A2: suspendable effects | Current hosted effect path versus checkpoint/handoff/resume on identical recorded outcomes | Same results and replay, no uncertain redispatch, preserved obligations, and lower active-host cost on the declared slow-work mix. Cloud owns hosting measurement, not ALGAL receipt timing. |
+| A3: investment repayment | Fixed, fresh-synthesis, conventional, and no-library controls versus a retained procedure library | Later unseen-task improvement under equal endowments after search, evaluation, maintenance, migration, and failures. Retain a negative finding if repayment is absent over the frozen horizon. |
+
+Each record names an owner and records one outcome: supported for the declared
+scope, rejected, inconclusive, or blocked. No baseline means no improvement
+claim. A selected candidate is not operationally active until the applicable
+maturity gates pass. Preserve both successful and failed records; do not mark
+A0 through A3 complete because their plans or fixtures exist.
 
 ### Maturity gates
 
@@ -1072,6 +1316,12 @@ exists. The document is the shared map that makes those measurements and their
 implementation lanes reviewable.
 
 ## Research record
+
+The 2026-10-04 revision uses [Temper's recorded mechanisms and limits](lineage.md#temper-contract-first-behavior)
+and [Valhalla's north-star hill-climbing strategy at `2bd2b9e`](https://github.com/hraness/valhalla/blob/2bd2b9ece95f44aefc8a6e29e1362c52b0568fbf/docs/north-star.md).
+Valhalla supplies the safety-first comparison discipline, not evidence for
+ALGAL's economic or capability claims. Cloud's companion north star owns the
+Cloudflare pricing references and hosted experiment baseline.
 
 The PLDB index and search result pages consulted for this plan are public indexes,
 not claims that ALGAL implements the cited systems:

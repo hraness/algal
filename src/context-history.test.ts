@@ -452,6 +452,87 @@ describe("context history live permissions", () => {
   });
 });
 
+describe("context history conditional generation publication", () => {
+  test("compares the expected generation, advances once, and replays only the same body", async () => {
+    const f = await fixture();
+    const before = (await f.reader.inspect()).generation;
+    const first = derivatives(f.history, [[0, 4]], 1);
+    await deny(f.host.publishGeneration(f.ref, first, hash("unobserved generation")));
+    expect((await f.reader.inspect()).generation).toBe(before);
+    await f.host.publishGeneration(f.ref, first, before);
+    const published = contextHistoryDigest(first.generation);
+    expect((await f.reader.inspect()).generation).toBe(published);
+    await f.host.publishGeneration(f.ref, first, before);
+    await deny(f.host.publishGeneration(f.ref, derivatives(f.history, [[4, 8]], 1), published));
+    await deny(f.host.publishGeneration(f.ref, derivatives(f.history, [[4, 8]], 2), before));
+    expect((await f.reader.inspect()).generation).toBe(published);
+    await f.host.publishGeneration(f.ref, derivatives(f.history, [[4, 8]], 2), published);
+    expect((await f.reader.inspect()).generation).not.toBe(published);
+  });
+  test("refuses skipped or regressing counters without changing the accepted pool", async () => {
+    const f = await fixture();
+    const before = (await f.reader.inspect()).generation;
+    for (const generation of [0, 2, 4095]) await deny(f.host.publishGeneration(f.ref, derivatives(f.history, [[0, 4]], generation), before));
+    expect((await f.reader.inspect()).generation).toBe(before);
+  });
+  test("concurrent proposals cannot overwrite another completion", async () => {
+    const f = await fixture();
+    const before = (await f.reader.inspect()).generation;
+    const proposals = [derivatives(f.history, [[0, 4]], 1), derivatives(f.history, [[4, 8]], 1)];
+    const results = await Promise.allSettled(proposals.map(pool => f.host.publishGeneration(f.ref, pool, before)));
+    expect(results.filter(result => result.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter(result => result.status === "rejected")).toHaveLength(1);
+    const winner = results.findIndex(result => result.status === "fulfilled");
+    expect((await f.reader.inspect()).generation).toBe(contextHistoryDigest(proposals[winner]!.generation));
+  });
+  test("grant revocation during permission resolution prevents publication and replay", async () => {
+    const f = await fixture();
+    let checks = 0, revoke = false;
+    const host = new ContextHistoryHost(f.store, { principal: "owner", resolveCurrent: async () => {
+      if (revoke && ++checks === 2) host.revoke(ref);
+      return f.current;
+    } });
+    const ref = await host.admit(f.history);
+    const before = (await host.inspect(ref)).generation;
+    const next = derivatives(f.history, [[0, 4]], 1);
+    revoke = true;
+    await deny(host.publishGeneration(ref, next, before));
+    await deny(host.publishGeneration(ref, next, before));
+  });
+});
+
+describe("context history authorization vector followups", () => {
+  test("a valid digest outside the admitted catalog is not an addressable node", async () => {
+    const f = await fixture();
+    const before = f.resolveCalls;
+    await deny(f.reader.expand(hash("unadmitted source node")));
+    expect(f.resolveCalls).toBe(before);
+  });
+  test("cached continuation pages accept only their issued input cursor", async () => {
+    const values = original(16).map(value => ({ ...value, kind: "observation" as const, text: "a".repeat(1800) }));
+    const f = await fixture(values, undefined, { recentLeaves: 0 });
+    const limits = { maxReadBytes: 2000 };
+    const first = await f.reader.overview({ limits });
+    expect(first.cursor).not.toBeNull();
+    const second = await f.reader.overview({ limits, cursor: first.cursor! });
+    await f.host.validateView(f.ref, second, first.cursor);
+    await expect(f.host.validateView(f.ref, first, first.cursor)).rejects.toMatchObject({ code: "PARSE_FAILED" });
+    await deny(f.host.validateView(f.ref, second, { ...first.cursor!, offset: 0 }));
+  });
+  test("conditional publication cannot restore an invalidated node or ancestor", async () => {
+    const f = await fixture();
+    const before = (await f.reader.inspect()).generation;
+    f.current = { ...f.current, invalidated: [4] };
+    for (const ranges of [[[4, 8]], [[0, 8]]] as [number, number][][]) await deny(f.host.publishGeneration(f.ref, derivatives(f.history, ranges, 1), before));
+    expect((await f.reader.inspect()).generation).toBe(before);
+    const unaffected = derivatives(f.history, [[0, 4]], 1);
+    await f.host.publishGeneration(f.ref, unaffected, before);
+    f.current = { ...f.current, invalidated: [0, 4] };
+    await deny(f.host.publishGeneration(f.ref, unaffected, before));
+    expect((await f.reader.read(4)).text).toBe(f.values[4]!.text);
+  });
+});
+
 export function accessFor(history: ContextHistory): ContextHistoryAccess {
   return {
     schema: "algal.context-history-access.v1", history: contextHistoryDigest(history), scope: history.scope,

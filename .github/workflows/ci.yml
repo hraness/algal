@@ -419,6 +419,7 @@ jobs:
       - run: bun scripts/native-parity.ts
       - run: bun scripts/agent-local-context-parity.ts
       - run: bun scripts/context-history-parity.ts
+      - run: bun scripts/context-summary-parity.ts
       - run: bun scripts/process-parity.ts
       - run: bun scripts/store-parity.ts
       - run: bun scripts/cli-parity.ts

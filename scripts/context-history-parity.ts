@@ -39,6 +39,11 @@ const cases: Case[] = [
   { name: "access-revisions", sources: source(8), operations: [overview({ save: "first" }), { op: "current", revision: 1 }, { op: "validate", saved: "first" }, overview(), { op: "current", revision: 0 }, read(0)] },
   { name: "cached-source-removal", sources: source(16), configuration: { recentLeaves: 0 }, operations: [{ op: "generation", ranges: [[0, 8], [4, 8]], generation: 0 }, overview({ save: "cached" }), { op: "validate", saved: "cached" }, { op: "missing", index: 4 }, { op: "validate", saved: "cached" }, overview(), read(4), { op: "search", query: "needle" }] },
   { name: "cached-empty-snapshot-removal", sources: [], operations: [overview({ save: "cached" }), { op: "missing" }, { op: "validate", saved: "cached" }, { op: "inspect" }] },
+  { name: "unadmitted-node", sources: source(8), operations: [{ op: "expand-unknown" }, read(0)] },
+  { name: "cached-input-cursor", sources: source(16, "a".repeat(1800)).map(value => ({ ...value, kind: "observation" })), configuration: { recentLeaves: 0 }, operations: [overview({ limits: { maxReadBytes: 2000 }, save: "first" }), overview({ limits: { maxReadBytes: 2000 }, after: "first", save: "second" }), { op: "validate", saved: "second", after: "first" }, { op: "validate", saved: "first", after: "first" }, { op: "validate", saved: "second", after: "first", index: 0 }] },
+  { name: "conditional-publication", sources: source(8), operations: [{ op: "inspect", save: "before" }, { op: "publish", ranges: [[0, 4]], generation: 2, after: "before" }, { op: "publish", ranges: [[0, 4]], generation: 1, after: "before" }, { op: "publish", ranges: [[0, 4]], generation: 1, after: "before" }, { op: "inspect", save: "published" }, { op: "publish", ranges: [[4, 8]], generation: 1, after: "published" }, { op: "publish", ranges: [[4, 8]], generation: 2, after: "before" }, { op: "publish", ranges: [[4, 8]], generation: 2, after: "published" }, { op: "inspect" }] },
+  { name: "invalidated-publication", sources: source(8), operations: [{ op: "inspect", save: "before" }, { op: "current", invalidated: [4] }, { op: "publish", ranges: [[0, 8]], generation: 1, after: "before" }, { op: "publish", ranges: [[0, 4]], generation: 1, after: "before" }, { op: "current", invalidated: [0, 4] }, { op: "publish", ranges: [[0, 4]], generation: 1, after: "before" }, read(4)] },
+  { name: "revoked-publication", sources: source(8), operations: [{ op: "inspect", save: "before" }, { op: "current", state: "revoked" }, { op: "publish", ranges: [[0, 4]], generation: 1, after: "before" }] },
 ];
 
 function derivatives(history: ContextHistory, ranges: JsonValue, generation: number) {
@@ -91,7 +96,11 @@ async function reference(item: Case): Promise<JsonValue> {
           if (typeof operation.save === "string") saved.set(operation.save, asJsonValue(value, "saved parity page") as JsonObject);
           break;
         }
-        case "inspect": value = await host.inspect(selected, abort.signal); break;
+        case "inspect": {
+          value = await host.inspect(selected, abort.signal);
+          if (typeof operation.save === "string") saved.set(operation.save, asJsonValue(value, "saved parity inspection") as JsonObject);
+          break;
+        }
         case "read": value = await host.read(selected, operation.index as number, limits, abort.signal); break;
         case "slice": value = await host.slice(selected, operation.index as number, operation.startByte as number, operation.endByte as number, limits, abort.signal); break;
         case "search": value = await host.search(selected, {
@@ -99,15 +108,24 @@ async function reference(item: Case): Promise<JsonValue> {
           ...(operation.maxResults === undefined ? {} : { maxResults: operation.maxResults as number }),
           ...(operation.maxScanBytes === undefined ? {} : { maxScanBytes: operation.maxScanBytes as number }),
         }, limits, abort.signal); break;
-        case "expand": value = await host.expand(selected, contextHistoryDigest(contextHistoryNode(history, operation.start as number, operation.end as number)), limits, abort.signal); break;
+        case "expand": case "expand-unknown": value = await host.expand(selected, operation.op === "expand-unknown" ? hash("unadmitted source node") : contextHistoryDigest(contextHistoryNode(history, operation.start as number, operation.end as number)), limits, abort.signal); break;
         case "delegate": {
           const child = await host.delegate(selected, operation.indices as number[], limits);
           refs.set(operation.name as string, child); value = child; break;
         }
         case "revoke": host.revoke(selected); value = null; break;
         case "missing": unavailable.add(operation.index === undefined ? snapshot : history.leaves[operation.index as number]!.entry); value = null; break;
-        case "validate": await host.validateView(selected, saved.get(operation.saved as string)!); value = null; break;
-        case "generation": await host.useGeneration(selected, derivatives(history, operation.ranges!, operation.generation as number)); value = null; break;
+        case "validate": {
+          const cursor = typeof operation.after === "string" ? structuredClone(saved.get(operation.after)!.cursor as JsonObject) : undefined;
+          if (cursor && operation.index !== undefined) cursor.offset = operation.index;
+          await host.validateView(selected, saved.get(operation.saved as string)!, cursor); value = null; break;
+        }
+        case "generation": case "publish": {
+          const pool = derivatives(history, operation.ranges!, operation.generation as number);
+          if (operation.op === "publish") await host.publishGeneration(selected, pool, saved.get(operation.after as string)!.generation as Digest);
+          else await host.useGeneration(selected, pool);
+          value = null; break;
+        }
         case "current": {
           const { op: _, ...changes } = operation;
           const invalidated = changes.invalidated;

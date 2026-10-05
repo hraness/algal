@@ -1,0 +1,58 @@
+{
+  "schema": "algal.context-summary-vectors.v1",
+  "cases": [
+    {
+      "name": "complete",
+      "result": {
+        "ok": true,
+        "value": {
+          "history": "sha256:4bda1dd3c8a2b27e2d73a4b6548e0758054f1371d8c4e459695e2b7d4f72469d",
+          "node": "sha256:bab97e9d7f03b4fb4bd04fda8c496a759774943615845a355cbed93b614b5c1d",
+          "request": "sha256:11917eb09c632f3746865aae7631d394aecafceed68f37fb3adb6764f4e8b3b5",
+          "queue": "sha256:31229675f24dc7b79db983237142d37f2524a0d799b22e0fd288f0b7162617d8",
+          "result": "sha256:c3ce25d5546d03ad39f2f9f79936e00f075c97f075fdf4d6dd5acc2763dc27cf",
+          "generation": "sha256:056c02f95c283578c40746db8b0fb1390c817bef03dfbabe8fe8e8130ad6176c",
+          "summary": "sha256:bc6de043f5cd519fc3b043efce1e4e67cb888ecb62b083df00b726fc7914a2a7"
+        }
+      }
+    },
+    {
+      "name": "failed",
+      "result": {
+        "ok": true,
+        "value": {
+          "history": "sha256:4bda1dd3c8a2b27e2d73a4b6548e0758054f1371d8c4e459695e2b7d4f72469d",
+          "node": "sha256:bab97e9d7f03b4fb4bd04fda8c496a759774943615845a355cbed93b614b5c1d",
+          "request": "sha256:11917eb09c632f3746865aae7631d394aecafceed68f37fb3adb6764f4e8b3b5",
+          "queue": "sha256:31229675f24dc7b79db983237142d37f2524a0d799b22e0fd288f0b7162617d8",
+          "result": "sha256:02c571c040e1d3914d4a6c0dae1259d1204a9ea1dd7a07eef4b57cbfc78103e6",
+          "generation": "sha256:1b17dcd93ce784ac812cdee53bcd802b2d7fbb9b0922d5643cedecece3b6d892",
+          "summary": null
+        }
+      }
+    },
+    { "name": "changed-body", "result": { "ok": false, "code": "PARSE_FAILED" } },
+    { "name": "changed-prompt", "result": { "ok": false, "code": "PARSE_FAILED" } },
+    { "name": "changed-output-bytes", "result": { "ok": false, "code": "PARSE_FAILED" } },
+    { "name": "skipped-generation", "result": { "ok": false, "code": "PARSE_FAILED" } },
+    { "name": "extra-result-key", "result": { "ok": false, "code": "PARSE_FAILED" } }
+  ],
+  "metrics": [
+    {
+      "name": "complete",
+      "evidence": "sha256:138d29a5f1abf9462f9730d58cc96d5d4f313f48ffb6f6c08f1777ec8ed7ecdb",
+      "charged": { "work": 6006946, "attempts": 1, "runs": 1 },
+      "original": "The team chose a local index. The provider option remains unresolved.",
+      "view": "complete",
+      "readSignatures": 6
+    },
+    {
+      "name": "failed",
+      "evidence": "sha256:215a10037fc42d6339e8a8d9643103a204ce60fba80c9c68879b18ae16ee44e5",
+      "charged": { "work": 3005251, "attempts": 1, "runs": 1 },
+      "original": "The team chose a local index. The provider option remains unresolved.",
+      "view": "incomplete",
+      "readSignatures": 6
+    }
+  ]
+}

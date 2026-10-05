@@ -204,8 +204,11 @@ can retrieve admitted original text under a host-selected grant. The optional
 [progressive reader](../spec/v1/context-history.md) adds recent detail and
 expandable older ranges over those sources, following the
 [source-preserving memory design reference](lineage.md#source-preserving-memory).
-Missing summaries remain pending; ordinary reads do not create them. Recorded
-summary maintenance and consumer integration remain separate next steps.
+Missing summaries remain pending; ordinary reads do not create them. Optional
+[recorded summary jobs](../spec/v1/context-history.md#explicit-summary-jobs) use
+the existing process journal and task work account, keep unfinished allowances
+reserved, and check current permission before publication. Consumer integration
+and longitudinal comparison remain separate next steps.
 
 The original remains distinct from the summary, and remembered history remains
 distinct from current support. An older model answer cannot become a logical fact
@@ -368,7 +371,19 @@ of competing to be the one best procedure. ALGAL's manifests and evidence
 contracts are components of that possibility. A public ecosystem, portable
 trust, and automatic cross-domain transfer do not exist yet.
 
-Across all three, the shift is the same: software development becomes partly
+**Funded autonomous projects and businesses.** An owner, investor, or sponsor
+could give a habitat a purpose and an initial allocation of money, model tokens,
+compute, storage, or service usage. The habitat would spend a permitted portion
+developing reusable procedures, use them to perform work, and seek further
+backing when appropriate. Customer revenue could replenish resources, but an
+internal service or research project would not need to sell anything. Permission
+to use a service and an allowance to consume it remain separate. Different
+resources retain their own units, expiry, and restrictions; an estimated cash
+value does not make them interchangeable. The [north-star resource model](north-star.md#resource-endowed-habitats)
+and [Cloud's proposed direction](https://github.com/hraness/algal-cloud/blob/main/docs/north-star.md)
+define the host responsibilities and comparative tests for this extension.
+
+Across these uses, the shift is the same: software development becomes partly
 the design of environments in which procedures are discovered, tested,
 retained, and governed. Human engineering does not disappear. More of its
 effort moves toward defining interfaces, constraints, evaluators, and the
