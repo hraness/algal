@@ -115,8 +115,6 @@ fn validate(node: &SurfaceNode, depth: usize, ids: &mut BTreeSet<String>) -> Res
     Ok(())
 }
 
-#[cfg(feature = "dioxus-ui")]
-pub mod dioxus_adapter;
 #[cfg(feature = "tui")]
 pub mod tui_adapter;
 

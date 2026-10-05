@@ -14,3 +14,4 @@ promoted/
 coverage/
 .env*
 site/.production-browser/
+**/target/

@@ -84,8 +84,6 @@ try {
     assert(opened.status === 200 && body.capture.head === capture.head && body.capture.tasks[0]?.title === "Extracted app task", "Extracted browser host serves the same captured application");
     assert((await fetch(`${url.origin}/api/open`, { signal: AbortSignal.timeout(5000) })).status === 403, "Extracted browser host requires owner authorization");
   } finally { reader.releaseLock(); clearTimeout(serverTimer); if (server.exitCode === null) server.kill("SIGKILL"); await server.exited; }
-  await command(["/usr/bin/codesign", "--verify", "--deep", "--strict", join(root, "ALGAL Triage.app")]);
-  checks.push("Extracted .app ad-hoc signature verifies");
   const report = { contract: "algal.triage-package-smoke.v1", ok: true, archive: resolve(archive), archiveSha256: createHash("sha256").update(await readFile(resolve(archive))).digest("hex"), sourceSha256: manifest.provenance.source.sha256, gitHeadAtBuild: manifest.provenance.gitHead, dirtyAtBuild: manifest.provenance.gitWorktreeDirty, platform: `${process.platform}-${process.arch}`, noSourceCheckoutRequired: true, noBunInstallationRequired: true, networkDenied: "not-tested-here", checks, finalHead: capture.head, states: transfer.states.length };
   if (reportPath) await writeFile(reportPath, JSON.stringify(report, null, 2) + "\n");
   console.log(JSON.stringify(report));

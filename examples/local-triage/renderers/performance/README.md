@@ -41,10 +41,13 @@ not a terminal emulator's presentation latency.
 
 The earlier [Dioxus Web spike](../../../malleable-site/renderers/measurement.json)
 weighed 362,713 raw / 148,449 gzip bytes. It is a passive captured-tree renderer,
-so this is not an equivalent interactive workload comparison. Keep the measured
-lightweight embed for sites and Dioxus for the packaged desktop. An interactive
-Dioxus Web port remains a separate decision requiring equivalent behavior and
-measurements; no performance advantage is inferred from the passive spike.
+so this is not an equivalent interactive workload comparison.
+
+The Dioxus desktop renderer and its WebView/GTK/servo dependency tree were
+subsequently removed: the example could not reach fixes for advisories the tree
+carried. The desktop rows and the CUA/native observer scripts that produced them
+are retained here only as this dated record; the package is now the terminal
+application plus the standalone host.
 
 ## Reproduce
 
@@ -66,23 +69,7 @@ host-run --mode=shared --lane=mac-native --label=algal-renderer-performance-host
   PACKAGE_ROOT FRESH_ACTION_OUTPUT
 ```
 
-Resolve these tools to installed absolute paths for reviewed host access. The
-first native observer lacked inherited accessibility permission; its report
-preserves unavailable desktop checks and a failing aggregate status. It made no
-permission request. Actual desktop measurements instead used the authorized CUA
-service while [cua-lease.ts](cua-lease.ts) held `mac-native` custody, launched the
-exact package with the generated state, and sampled only that process's RSS:
-
-```sh
-host-run --mode=shared --lane=mac-native --label=algal-renderer-performance-cua -- \
-  bun examples/local-triage/renderers/performance/cua-lease.ts \
-  PACKAGE_ROOT INITIALIZED_STATE FRESH_CUA_OUTPUT
-```
-
-The CUA observer recorded launch-to-visible content as an upper bound, then
-alternated Complete/Reopen twenty times, locating controls in each fresh
-accessibility tree and checking the resulting status. It recorded each
-click-plus-observation duration and quit normally. The process sampler did not
-synthesize UI events. Preserve failed/unavailable reports alongside successful
+Resolve these tools to installed absolute paths for reviewed host access.
+Preserve failed/unavailable reports alongside successful
 diagnostics. Raw local receipts are identified by name and SHA-256 in the summary;
 they remain outside the repository with the package qualification evidence.

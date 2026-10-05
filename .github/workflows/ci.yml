@@ -248,28 +248,6 @@ jobs:
       - run: cargo test --manifest-path examples/local-triage/renderers/Cargo.toml --locked
       - run: cargo clippy --manifest-path examples/local-triage/renderers/Cargo.toml --locked --all-targets -- -D warnings
 
-  # macOS runs only the desktop feature surface; the generic renderer checks
-  # run once on Linux above.
-  surface-renderers-macos:
-    name: Surface renderer contract (macos-14)
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
-    runs-on: macos-14
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-          components: clippy
-      - uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: surface-renderers-desktop
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-          workspaces: examples/local-triage/renderers -> target
-      - run: cargo test --manifest-path examples/local-triage/renderers/Cargo.toml --locked --features desktop
-      - run: cargo clippy --manifest-path examples/local-triage/renderers/Cargo.toml --locked --all-targets --features desktop -- -D warnings
-
   # One Linux build of the kernel: fmt, clippy, the test suite (which builds
   # the debug binary) and the debug binary as an artifact that the parity,
   # application-parity and demo jobs download instead of compiling again.
@@ -513,7 +491,6 @@ jobs:
       - coding-harness
       - browser-grow
       - surface-renderers
-      - surface-renderers-macos
       - native
       - native-parity-build
       - native-macos
@@ -534,7 +511,6 @@ jobs:
           CODING_HARNESS: ${{ needs.coding-harness.result }}
           BROWSER_GROW: ${{ needs.browser-grow.result }}
           SURFACE_RENDERERS: ${{ needs.surface-renderers.result }}
-          SURFACE_RENDERERS_MACOS: ${{ needs.surface-renderers-macos.result }}
           NATIVE: ${{ needs.native.result }}
           NATIVE_PARITY_BUILD: ${{ needs.native-parity-build.result }}
           NATIVE_MACOS: ${{ needs.native-macos.result }}
@@ -561,7 +537,6 @@ jobs:
           require coding-harness "$CODING_HARNESS" "$code_skip"
           require browser-grow "$BROWSER_GROW" "$browser_skip"
           require surface-renderers "$SURFACE_RENDERERS" "$code_skip"
-          require surface-renderers-macos "$SURFACE_RENDERERS_MACOS" "$code_skip"
           require native "$NATIVE" "$code_skip"
           require native-parity-build "$NATIVE_PARITY_BUILD" "$code_skip"
           require native-macos "$NATIVE_MACOS" "$code_skip"
