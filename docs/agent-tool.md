@@ -152,15 +152,20 @@ checked 4 October 2026.
 
 **Codex.** Codex runs the command in its sandbox. With workspace write access,
 such as the `:workspace` permission profile, `algal call` writes its receipt
-under `.algal/` in the project and needs no approval. With read-only access it
-fails with `IO_FAILED`, because it cannot write the store. Codex keeps network
-access off for commands by default, so an executor that reaches a model over
-the network, such as `--gateway-model`, needs network access or your approval.
+under `.algal/` in the project, and the `on-request` approval policy lets it
+run without asking. With read-only access it fails with `IO_FAILED`, because it
+cannot write the store. Codex keeps network access off for commands by default,
+so an executor that reaches a model over the network, such as `--gateway-model`,
+needs network access or your approval. The sandbox and approval rules follow
+[Codex permissions](https://developers.openai.com/codex/permissions) and
+[agent approvals and security](https://developers.openai.com/codex/agent-approvals-security),
+checked 4 October 2026.
 
 These results were checked on 4 October 2026 with the native `v0.2.0-vm.14`
 release on macOS: the scripted call returned `ok: true`, and the same call
 under `codex sandbox` (Codex CLI 0.160.0) succeeded with the `:workspace`
-profile and failed with `IO_FAILED` under `:read-only`.
+profile and failed with `IO_FAILED` under `:read-only`. Claude Code was not
+run, and no agent session made the call.
 
 ## Verify the result later
 

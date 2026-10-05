@@ -854,7 +854,7 @@ const mirroredTitle = (title: string, section: "docs" | "spec") =>
 const DOC_PAGE_META: Readonly<Record<string, { title: string; description: string }>> = {
   "native-workbench": {
     title: "Pause an agent program for approval and recover it after a crash",
-    description: "Start a native ALGAL program that waits for your approval, approve it in a later command, and run its crash tests. The decision is a fixture, not a model.",
+    description: "Start a native ALGAL program that waits for your approval, approve it in a later command, and run its crash tests. A built-in fixture stands in for the model.",
   },
   "agent-tool": {
     title: "Call an ALGAL program as a tool from Claude Code, Codex, or an API",
