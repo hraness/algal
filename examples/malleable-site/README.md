@@ -7,5 +7,5 @@ root to begin. The live browser demonstration is at
 [algal.computer/living](https://algal.computer/living/).
 
 An earlier renderer experiment consumed the exact same semantic view in Dioxus
-web/desktop and Ratatui. The spike concluded and the adapters were removed; the
-git history retains the record.
+web and desktop. The spike concluded and its adapters were removed; the git
+history retains the record.

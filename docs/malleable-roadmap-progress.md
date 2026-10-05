@@ -81,12 +81,12 @@ this document records orchestration state.
 
 | Stage | Evidence | Delivery scope |
 | --- | --- | --- |
-| A | Qualified portable filesystem/memory lifecycle, 19 native/reference receipts and 38 cross-verifications; same task capture/actions across browser, desktop and TUI; shared session fixtures; actual renderer costs and limitations measured | No missing local exit evidence. Desktop's provisional CUA-inclusive action budget failed; performance remains experimental, with paint latency unisolated |
+| A | Qualified portable filesystem/memory lifecycle, 19 native/reference receipts and 38 cross-verifications; same task capture/actions across browser and desktop; shared session fixtures; actual renderer costs and limitations measured | No missing local exit evidence. Desktop's provisional CUA-inclusive action budget failed; performance remains experimental, with paint latency unisolated |
 | B | Qualified static fallback, independent mounts, keyboard continuity, expected-head rejection, preview/adoption and restoration; actual staging preview and owner browser checks pass | Staging qualification; production acceptance checks the deployed capture against the validated build |
 | C | Qualified ordered/deduplicated signals, same-capture explanations, persistent controls, journal/history and interrupted-publication/restart behavior | Local owner and public read-only captures share the same bounded read model |
 | D | Real Gateway attempts retained; independent pass/fail/inconclusive shadows; guarded adoption; one joined provider-reported USD 0.001369 debit, with the original unknown preserved | Missing/malformed provider billing remains unknown; recorded public fixtures make no inference calls |
 | E | Shared lifecycle in actual workerd, immutable core dependency pin, typed client, owner dashboard, A/A instrumentation, inert recovery and forward restoration | The [cloud delivery record](https://github.com/hraness/algal-cloud/blob/codex/application-roadmap/docs/application-roadmap.md) owns exact integration, isolated hosted qualification and dashboard evidence |
-| F | Final exact-source Dioxus/Ratatui package: 37 extraction checks, 11 packaged offline checks, actual native typing/select/draft interactions; real network-denied Apple revision change and matching packaged provider binaries | Functional exit qualified for macOS arm64; ad-hoc signed, not notarized; broader platforms and desktop performance are not production-qualified |
+| F | Final exact-source Dioxus package: 37 extraction checks, 11 packaged offline checks, actual native typing/select/draft interactions; real network-denied Apple revision change and matching packaged provider binaries | Functional exit qualified for macOS arm64; ad-hoc signed, not notarized; broader platforms and desktop performance are not production-qualified |
 | G | Qualified materially different task application, actual v1→v2 migration, workflow changes, typed forms/actions, core lifecycle conformance, pure evidence forks and explicit field conflicts | Full browser-local kernel explicitly deferred, not claimed by the browser renderer |
 
 Core commit `39607174063030eb4793ab65601a41d7d7c918d4` passed the aggregate
@@ -154,8 +154,8 @@ schema migration, explicit fork conflict resolution and separate durable session
 Its focused host suite passed 8 tests/81 assertions after independent review
 removed missing-evidence healing and cache masking. Nineteen complete
 native/reference receipts matched with 38 cross-runtime offline verifications.
-The Dioxus desktop and Ratatui builds passed. Browser, desktop and terminal
-share semantic capture/command data; five session-identity fixtures cover adding,
+The Dioxus desktop build passed. Browser and desktop share semantic
+capture/command data; five session-identity fixtures cover adding,
 changing, moving and removing controls while retaining drafts. Actual native
 interaction preserved a task and independent draft across schema upgrade and
 explicit rebase. It exposed Dioxus fast-typing loss and initial dropdown errors;
@@ -164,8 +164,8 @@ regressions exercise real virtual-DOM mutations, and actual final-package typing
 first-mount selection, panel remount, save and draft-reset checks passed.
 
 The final macOS arm64 archive passed 37 fresh-extraction checks and 11 checks
-under process-tree network denial. It includes a standalone expression-WASM host,
-Dioxus app and Ratatui executable; no checkout or Bun installation is required.
+under process-tree network denial. It includes a standalone expression-WASM host
+and Dioxus app; no checkout or Bun installation is required.
 The archive SHA-256 is
 `e59b81d33b20af0917da6211510e76d438155af6bc05abaa5f12c3e08707e556`;
 its clean source inventory SHA-256 is
