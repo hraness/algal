@@ -131,16 +131,15 @@ Dioxus is a leading candidate, not a settled architectural dependency. Reviewed 
 | Dioxus Web | WASM driving browser DOM; selectable mount root | Test as an embedded surface against a small semantic HTML baseline |
 | Dioxus desktop/mobile | Native Rust logic with a system WebView | Early local application candidate; do not call these platform-native widgets |
 | Dioxus Native / Blitz | Separate HTML/CSS/WGPU path; Blitz is beta | Later qualification, especially text input and accessibility |
-| Dioxus TUI | Deprecated | Use a separate Ratatui adapter |
 | Dioxus LiveView | Deprioritized server/WebSocket approach | Do not make it the foundation of offline operation |
 
-[Dioxus platform structure](https://dioxuslabs.com/learn/0.7/beyond/project_structure/), [Blitz status](https://github.com/DioxusLabs/blitz#status), [Ratatui's Elm architecture](https://ratatui.rs/concepts/application-patterns/the-elm-architecture/)
+[Dioxus platform structure](https://dioxuslabs.com/learn/0.7/beyond/project_structure/), [Blitz status](https://github.com/DioxusLabs/blitz#status)
 
 A compiled recursive renderer can interpret a changing ALGAL view tree using keyed components. Layout, content, tree structure and action bindings can change without compiling new Rust. Dioxus's RSX and VNode APIs support dynamic content, while optimized templates use static structures. Begin with a fixed interpreter over versioned widgets, and measure allocation/reconciliation behavior through repeated revisions. [RSX](https://dioxuslabs.com/learn/0.7/tutorial/rsx/), [template API](https://docs.rs/dioxus-core/0.7.10/dioxus_core/struct.Template.html)
 
 Development hot reload and experimental Rust hotpatching are useful tooling, but they are not ALGAL's production evolution protocol. Arbitrary new native code remains a separately built and admitted host extension. [Dioxus hot reload](https://dioxuslabs.com/learn/0.7/essentials/ui/hotreload/)
 
-The renderer spike should test one small interactive artifact in Dioxus Web, a desktop WebView and a minimal Ratatui renderer. Cover stable focus and draft preservation, IME input, keyboard navigation, accessible names, stale events, restart, repeated revision swaps, and multiple web mounts/unmounts. Measure additional download size, startup, interaction latency, retained memory and host-site style/router interference. Set performance budgets against the chosen host site before declaring success.
+The renderer spike should test one small interactive artifact in Dioxus Web and a desktop WebView. Cover stable focus and draft preservation, IME input, keyboard navigation, accessible names, stale events, restart, repeated revision swaps, and multiple web mounts/unmounts. Measure additional download size, startup, interaction latency, retained memory and host-site style/router interference. Set performance budgets against the chosen host site before declaring success.
 
 For marketing embeds, useful HTML must exist before the interactive renderer loads. Use a static/SSR projection from an exact revision and state snapshot, then attach interaction without changing that initial tree. Dioxus supports SSR/hydration, but its app-oriented approach does not itself prove lightweight island integration. Hydration, teardown and cache invalidation need explicit tests. A custom element can provide an integration wrapper; it is not a security sandbox. [Web mounting API](https://docs.rs/dioxus-web/latest/dioxus_web/struct.Config.html), [Dioxus SSR](https://dioxuslabs.com/learn/0.7/essentials/fullstack/ssr/), [custom elements](https://html.spec.whatwg.org/multipage/custom-elements.html)
 

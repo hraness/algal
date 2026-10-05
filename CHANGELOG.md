@@ -12,6 +12,16 @@ independent of these package versions.
 
 ## Unreleased
 
+## v0.2.0-vm.15 - 2026-10-05
+
+The renderer examples now expose the supported web and desktop surfaces without
+shipping a terminal renderer.
+
+- Remove the retired terminal renderer examples, adapters, package entries and
+  dependency references.
+- Keep the browser and desktop semantic view contracts and their existing
+  qualification evidence.
+
 ## v0.2.0-vm.14 - 2026-09-30
 
 Native release checks keep the source checkout clean while testing archives
