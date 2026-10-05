@@ -204,8 +204,11 @@ can retrieve admitted original text under a host-selected grant. The optional
 [progressive reader](../spec/v1/context-history.md) adds recent detail and
 expandable older ranges over those sources, following the
 [source-preserving memory design reference](lineage.md#source-preserving-memory).
-Missing summaries remain pending; ordinary reads do not create them. Recorded
-summary maintenance and consumer integration remain separate next steps.
+Missing summaries remain pending; ordinary reads do not create them. Optional
+[recorded summary jobs](../spec/v1/context-history.md#explicit-summary-jobs) use
+the existing process journal and task work account, keep unfinished allowances
+reserved, and check current permission before publication. Consumer integration
+and longitudinal comparison remain separate next steps.
 
 The original remains distinct from the summary, and remembered history remains
 distinct from current support. An older model answer cannot become a logical fact

@@ -262,6 +262,74 @@ failed and maintenance work must debit the existing host work account.
 Cancellation, a new generation or a resumed queue cannot reset that account.
 No read triggers queue processing or compulsory inference.
 
+## Explicit summary jobs
+
+The optional TypeScript `ContextSummaryDriver` in `src/context-summary.ts`
+runs summary work through the existing durable process supervisor, effect
+journal, and `HabitatAccount`. Hosts attach it explicitly. Ordinary readers
+never construct or run a job. The [scripted example](../../examples/context-history/scripted.ts)
+uses synthetic originals and no provider. Its [frozen job vectors](../../scripts/fixtures/context-summary.json)
+record successful and failed work, record identities, account charges, and
+refusals of changed bodies, recipes, output sizes, and generation counters.
+
+`planContextSummaries` is a pure plan calculation. It orders aligned ranges
+bottom-up, binds available child summaries, omits unaffected current records,
+and includes corrected ranges and their ancestors. Plan metadata is limited
+to 8,388,608 encoded bytes and 262,144 JSON values. The total requested work
+stays within the queue's 67,108,864-unit ceiling: at the default per-job ceiling
+it queues at most four jobs, not thirty-two. Missing derivatives retain the
+raw, expandable reading path.
+
+A recipe identifies the prompt, policy, summarizer, executor configuration,
+and maximum effect duration. Each job has eight cells: one input, six recorded
+read-tool cells, and one model effect. Source proofs, exact original or child
+retrieval, escaped prompt framing, and post-call selection checks are recorded
+rather than performed as hidden model preparation. The tools conservatively
+charge 1,000,000 modeled work units each, plus the runtime's activation and
+encoded output charges. This is work accounting, not a token or billing claim.
+The driver refuses source proofs or framing that exceed a tool's ceiling.
+Five complete source-proof passes plus selected originals must fit the job's
+source allowance. This smaller maintenance limit does not reduce ordinary
+original-read capacity. The model effect is neither cacheable nor retryable.
+
+Before dispatch the host saves the complete existing account checkpoint,
+creates a one-generation durable process, and reserves its declared allowance.
+Job identity binds the request, manifest, checkpoint, source reference, plan,
+and recipe. A terminal receipt must replay and match that binding before the
+account is charged. Failure consumes the work and attempts recorded by the
+receipt. Repeating a finished job reuses its exact result and charge; it cannot
+substitute another body or use a fresh account.
+
+Ready, suspended, and uncertain jobs keep their reservation open. `restore`
+requires the exact saved checkpoint and a host-controlled handoff of the same
+account, permission host, and executor profile; it does not allocate more
+credit. `reconcile` only finishes work for which the journal already contains
+the complete needed output or terminal failure. Otherwise it leaves the job
+open. Neither operation dispatches another provider or live source read.
+Cancellation before dispatch creates no job; cancellation after the model
+starts remains uncertain until the recorded outcome can be reconciled.
+
+`publish` writes and verifies candidate nodes and summary bodies, then the
+candidate generation, before calling the conditional host publication method.
+The candidate pool is limited to 524,288 encoded bytes. A failed candidate
+write or stale/current-permission refusal leaves the previous generation active.
+Invalidation is not cleared by a summary job; affected ranges stay pending until
+the source owner supplies an appropriate current capture and permission.
+Originals, application observations, and accepted logical facts are never
+written by this driver.
+
+The host driver is not a new native execution engine or CLI command. Its
+ordinary process records and portable evidence replay independently through
+`algal process verify-evidence FILE`, which requires a regular JSON file.
+`bun scripts/context-summary-parity.ts` compares record identities, refusals,
+and complete/failed portable evidence between Bun and Rust. Job-record
+refusal codes match. The existing process verifier reports altered-tool replay
+as `RECEIPT_MISMATCH` in Bun and `VERIFY_FAILED` in the native CLI; both reject
+changed receipt or manifest digests with `DIGEST_MISMATCH`. The test checks
+these exact existing codes without changing the process interface. These
+fixtures do not establish memory quality, provider availability, or default
+activation.
+
 ## Views and captured continuations
 
 ```text
@@ -425,8 +493,14 @@ Only a bound TypeScript reader or individually scoped native operations belong
 in an agent-facing interface. Admission proves the captured originals and
 creates a host registry entry; a saved reference alone cannot create one.
 Re-admission of an existing history retains its published derivative generation;
-configured derivatives initialize a new catalog only. Host publication uses
-`useGeneration`, not re-admission.
+configured derivatives initialize a new catalog only. Host-controlled setup may
+use `useGeneration`, not re-admission. Maintenance publication uses
+`publishGeneration(reference, derivatives, expectedGeneration)` in TypeScript
+and `publish_generation` in Rust. After rechecking current permission, it
+requires the observed generation digest and a counter increment of exactly one.
+An identical already-published pool may be acknowledged again; a different body
+cannot overwrite that completion or skip a generation. Invalidated source ranges
+and their ancestors cannot be restored through this publication path.
 
 `inspect`, `read`, `slice`, `search`, `overview`, and `expand` each recheck
 current source selection. Reads check again after source fetches and refuse

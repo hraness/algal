@@ -308,21 +308,25 @@ The reading contract provides:
   or cache rebuilds cannot shift an earlier page;
 - explicit incomplete, unavailable, pending, and insufficient-budget outcomes;
 - pending ranges after derivative invalidation, while historical originals remain
-  separate from current facts. Recorded correction and summary repair work is
-  the next implementation step.
+  separate from current facts. Optional recorded summary jobs preserve that
+  distinction when creating or replacing a derivative.
 
 Source digests identify bytes, not permission. A summary is readable only when
 all contributing sources remain inside the reader's grant. A broad summary cannot
 be delegated to a narrower child by hiding its citations. Current authorization,
 source availability, and logical applicability remain separate checks.
 
-Summary creation is planned as a separate agent effect, not a scheduler
-operation or a side effect of reading. Its job identity includes the source/child digests, scope,
-policy, and summarizer configuration. Record its output and work in the existing
-process/effect machinery; replay reuses the recorded result. Queue depth, merge
-bursts, rebuild work, and aggregate inference all need limits. A missing summary
-must permit a bounded raw view or expose a pending range without compulsory
-model work before the user's task can proceed.
+Optional [summary creation](../spec/v1/context-history.md#explicit-summary-jobs)
+is a separate agent effect, not a scheduler operation or a side effect of reading.
+Its job identity includes the source/child digests, scope, policy, summarizer
+configuration, and existing work-account checkpoint. The process journal records
+its retrieval, output, and work; offline replay reuses the recorded result.
+Interrupted work keeps its reserved allowance until reconciliation, and publication
+checks the expected generation and current permission. Queue depth, merge bursts,
+rebuild work, and aggregate inference have explicit limits. A missing summary
+permits a limited raw view or exposes a pending range without compulsory model
+work before the user's task can proceed. Consumer adapters, later-work comparisons,
+and default activation remain unfinished.
 
 A summary is a navigation aid, not an admitted logical observation or proof of
 world state. Protect original user intent, retain the original admitted text, and

@@ -381,6 +381,12 @@ export class ContextHistoryHost {
     }
   }
   async useGeneration(input: ContextHistoryRef, derivativeInput: ContextHistoryDerivatives): Promise<void> {
+    await this.#replaceGeneration(input, derivativeInput);
+  }
+  async publishGeneration(input: ContextHistoryRef, derivativeInput: ContextHistoryDerivatives, expectedGeneration: Digest): Promise<void> {
+    await this.#replaceGeneration(input, derivativeInput, asDigest(expectedGeneration, "expected context history generation"));
+  }
+  async #replaceGeneration(input: ContextHistoryRef, derivativeInput: ContextHistoryDerivatives, expected?: Digest): Promise<void> {
     const { ref, value } = this.#registered(input);
     const checked = derivatives(value.catalog.history, derivativeInput);
     const current = await this.#current(value.catalog, ref, value.grant, null);
@@ -388,6 +394,16 @@ export class ContextHistoryHost {
     const again = await this.#current(value.catalog, ref, value.grant, null);
     this.#registered(ref);
     if (hash(current) !== hash(again)) denied();
+    if (expected !== undefined) {
+      const previous = value.catalog.generation;
+      if (contextHistoryDigest(previous) !== contextHistoryDigest(checked.generation) &&
+          (contextHistoryDigest(previous) !== expected || checked.generation.generation !== previous.generation + 1)) denied();
+      const invalidated = new Set(again.invalidated);
+      for (const node of checked.summaries.keys()) {
+        const range = this.#lookup(value.catalog, node);
+        if (value.catalog.history.leaves.slice(range.start, range.end).some(leaf => invalidated.has(leaf.sourceIndex))) denied();
+      }
+    }
     value.catalog.generation = checked.generation; value.catalog.summaries = checked.summaries;
   }
   async delegate(input: ContextHistoryRef, selected: readonly number[], requested?: Partial<ContextHistoryReadLimits>): Promise<ContextHistoryRef> {
