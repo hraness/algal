@@ -1,0 +1,7 @@
+program totals(order: json) -> json {
+  budget { max_agent_calls: 0 }
+
+  let net = order.subtotal - order.discount
+  let fee = if net >= 100 { 0 } else { 10 }
+  return { net: net, fee: fee, due: net + fee }
+}

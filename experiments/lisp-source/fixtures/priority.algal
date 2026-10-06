@@ -1,0 +1,7 @@
+program priority(order: json) -> json {
+  budget { max_agent_calls: 0 }
+
+  let urgent = order.score >= 90
+  let tier = if urgent { 1 } else { 2 }
+  return { tier: tier }
+}

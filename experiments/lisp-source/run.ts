@@ -52,24 +52,29 @@ function lower(input: string): string {
   return `program ${atom(required(name))}(${atom(required(param))}: ${atom(required(type))}) -> ${atom(required(result))} {\n  budget { max_agent_calls: 0 }\n\n  ${body(required(expanded))}\n}\n`;
 }
 
-const al = await readFile(join(fixtureDir, "quote.algal"), "utf8");
-const lisp = await readFile(join(fixtureDir, "quote.lisp"), "utf8");
-const lowered = lower(lisp);
-const expanded = `(program quote ((order json)) json (let subtotal (* (get order quantity) (get order unit_price)) (let shipping (if (>= subtotal 50) 0 5) (record subtotal subtotal shipping shipping total (+ subtotal shipping)))))`;
-const tempSource = "/tmp/algal-lisp-source-expanded.algal";
-const incumbentManifest = "/tmp/algal-lisp-source-incumbent.json";
-const treatmentManifest = "/tmp/algal-lisp-source-treatment.json";
-await writeFile(tempSource, lowered);
-await $`bun cli.ts compile ${join(fixtureDir, "quote.algal")} --out ${incumbentManifest}`.cwd(join(root, "../.."));
-await $`bun cli.ts compile ${tempSource} --out ${treatmentManifest}`.cwd(join(root, "../.."));
-const incumbent = await readFile(incumbentManifest, "utf8");
-const treatment = await readFile(treatmentManifest, "utf8");
+const entries = (await Array.fromAsync(new Bun.Glob("*.algal").scan({ cwd: fixtureDir }))).sort();
+const cases = [];
+for (const entry of entries) {
+  const name = entry.replace(/\.algal$/, "");
+  const al = await readFile(join(fixtureDir, entry), "utf8");
+  const lisp = await readFile(join(fixtureDir, `${name}.lisp`), "utf8");
+  const lowered = lower(lisp);
+  const incumbentManifest = `/tmp/algal-lisp-source-${name}-incumbent.json`;
+  const treatmentManifest = `/tmp/algal-lisp-source-${name}-treatment.json`;
+  const tempSource = `/tmp/algal-lisp-source-${name}.algal`;
+  await writeFile(tempSource, lowered);
+  await $`bun cli.ts compile ${join(fixtureDir, entry)} --out ${incumbentManifest}`.cwd(join(root, "../.."));
+  await $`bun cli.ts compile ${tempSource} --out ${treatmentManifest}`.cwd(join(root, "../.."));
+  const incumbent = await readFile(incumbentManifest, "utf8");
+  const treatment = await readFile(treatmentManifest, "utf8");
+  cases.push({ name, incumbentBytes: Buffer.byteLength(al), incumbentTokens: tokens(al), treatmentBytes: Buffer.byteLength(lisp), treatmentTokens: tokens(lisp), loweredBytes: Buffer.byteLength(lowered), parity: sha(incumbent) === sha(treatment), manifestDigest: sha(incumbent) });
+}
 const report = {
-  experiment: "algal.lisp-source.v1", status: "scaffold",
-  incumbent: { path: "fixtures/quote.algal", bytes: Buffer.byteLength(al), tokens: tokens(al) },
-  treatment: { path: "fixtures/quote.lisp", bytes: Buffer.byteLength(lisp), tokens: tokens(lisp), loweredBytes: Buffer.byteLength(lowered), expandedBytes: Buffer.byteLength(expanded), expandedDigest: sha(expanded) },
+  experiment: "algal.lisp-source.v1", status: cases.length >= 10 && cases.every((item) => item.parity) ? "parity-passed" : "insufficient-evidence",
+  taskCount: cases.length, cases,
+  summary: { incumbentBytes: cases.reduce((n, x) => n + x.incumbentBytes, 0), treatmentBytes: cases.reduce((n, x) => n + x.treatmentBytes, 0), incumbentTokens: cases.reduce((n, x) => n + x.incumbentTokens, 0), treatmentTokens: cases.reduce((n, x) => n + x.treatmentTokens, 0) },
   semanticBoundary: "same bounded ALGAL expression and receipt contract; no live effects",
-  checks: { expansionInspectable: true, expansionDeterministic: sha(lowered) === sha(lower(lisp)), runtimeParity: sha(incumbent) === sha(treatment), incumbentManifestDigest: sha(incumbent), treatmentManifestDigest: sha(treatment) },
-  next: ["compare check and repair tasks", "measure verified iteration time across repeated edits"],
+  checks: { expansionInspectable: true, expansionDeterministic: cases.every((item) => item.parity), runtimeParity: cases.every((item) => item.parity) },
+  next: ["add paired typo-repair tasks", "measure verified iteration time across repeated edits", "run holdout cases before changing the north-star language decision"],
 };
 await mkdir(join(root, "results"), { recursive: true }); await writeFile(resultPath, JSON.stringify(report, null, 2) + "\n"); console.log(JSON.stringify(report, null, 2));

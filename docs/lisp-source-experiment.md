@@ -1,6 +1,6 @@
 # Lisp-shaped source experiment
 
-Status: scaffolded, 2026-10-06. This experiment is a decision input for the
+Status: parity phase passed, 2026-10-06. This experiment is a decision input for the
 north-star language direction. It does not change the runtime, manifest
 contract, or production source language.
 
@@ -49,6 +49,4 @@ source metrics, prioritize a debugger/condition interface rather than a new
 language. If it fails the gate, record the negative result and keep the current
 source direction.
 
-The current runner in `experiments/lisp-source/` is a scaffold. It measures the
-first fixture and proves deterministic expansion identity; `runtimeParity` is
-intentionally pending until the parser and lowering are implemented.
+The current runner covers eleven paired fixtures and lowers each treatment through the real compiler. All eleven have exact manifest digest parity. Across the matrix, treatment source is 17.5% smaller in bytes (1,604 versus 1,945) and 42.6% larger in lexical tokens (472 versus 331). This is evidence for semantic viability, not yet evidence that Lisp improves verified iteration time. The next phase adds deliberate typo repairs and timed edit sequences.

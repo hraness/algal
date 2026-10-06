@@ -19,6 +19,6 @@ bun experiments/lisp-source/run.ts
 ```
 
 The runner emits a deterministic JSON report under `results/latest.json` with
-source bytes, token counts, expansion bytes, compile diagnostics, and replay
-identity. It is a development ergonomics experiment, not evidence of cumulative
+source bytes, token counts, expansion bytes, and exact manifest digest parity for
+every paired fixture. It is a development ergonomics experiment, not evidence of cumulative
 skill or production language readiness.

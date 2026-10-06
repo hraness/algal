@@ -1,0 +1,7 @@
+program gross(order: json) -> json {
+  budget { max_agent_calls: 0 }
+
+  let gross = order.price * order.quantity
+  let tax = gross * 0.08
+  return { gross: gross, tax: tax, total: gross + tax }
+}

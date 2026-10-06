@@ -1,0 +1,6 @@
+program ratio(order: json) -> json {
+  budget { max_agent_calls: 0 }
+
+  let weighted = order.a * 2 + order.b * 3
+  return { weighted: weighted }
+}
