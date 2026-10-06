@@ -1,0 +1,29 @@
+{
+  "experiment": "algal.lisp-source.v1",
+  "status": "scaffold",
+  "incumbent": {
+    "path": "fixtures/quote.algal",
+    "bytes": 255,
+    "tokens": 40
+  },
+  "treatment": {
+    "path": "fixtures/quote.lisp",
+    "bytes": 232,
+    "tokens": 58,
+    "loweredBytes": 261,
+    "expandedBytes": 212,
+    "expandedDigest": "cffdc32620f8b7d4e22ad00072a083c46b3af38841a6832c93c3c156a4f90cdf"
+  },
+  "semanticBoundary": "same bounded ALGAL expression and receipt contract; no live effects",
+  "checks": {
+    "expansionInspectable": true,
+    "expansionDeterministic": true,
+    "runtimeParity": true,
+    "incumbentManifestDigest": "496f8ded0535313e7d1a6797e13d6d4eff0641fc962998cafda3242d0c45f3d4",
+    "treatmentManifestDigest": "496f8ded0535313e7d1a6797e13d6d4eff0641fc962998cafda3242d0c45f3d4"
+  },
+  "next": [
+    "compare check and repair tasks",
+    "measure verified iteration time across repeated edits"
+  ]
+}
