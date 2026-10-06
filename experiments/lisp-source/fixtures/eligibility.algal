@@ -1,0 +1,6 @@
+program eligibility(order: json) -> json {
+  budget { max_agent_calls: 0 }
+
+  let eligible = order.score >= 80
+  return { eligible: eligible }
+}

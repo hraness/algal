@@ -1,0 +1,6 @@
+program clamp(order: json) -> json {
+  budget { max_agent_calls: 0 }
+
+  let base = if order.amount < 0 { 0 } else { order.amount }
+  return { amount: base }
+}

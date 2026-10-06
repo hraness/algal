@@ -1,0 +1,7 @@
+program margin(order: json) -> json {
+  budget { max_agent_calls: 0 }
+
+  let cost = order.units * order.cost
+  let revenue = order.units * order.price
+  return { margin: revenue - cost }
+}

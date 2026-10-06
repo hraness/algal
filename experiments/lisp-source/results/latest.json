@@ -1,0 +1,134 @@
+{
+  "experiment": "algal.lisp-source.v1",
+  "status": "parity-passed",
+  "taskCount": 11,
+  "cases": [
+    {
+      "name": "clamp",
+      "incumbentBytes": 159,
+      "incumbentTokens": 27,
+      "treatmentBytes": 121,
+      "treatmentTokens": 38,
+      "loweredBytes": 161,
+      "parity": true,
+      "manifestDigest": "37dfc31da00a22b7176bf1cfbacda45a2d680ca81c8510a3d6a6191cc3f1fac0"
+    },
+    {
+      "name": "discount",
+      "incumbentBytes": 153,
+      "incumbentTokens": 25,
+      "treatmentBytes": 128,
+      "treatmentTokens": 37,
+      "loweredBytes": 157,
+      "parity": true,
+      "manifestDigest": "640adc1007dc35ad9709f24e53a3d2426b457b9fbdba6501568ae00e2a4c1ed3"
+    },
+    {
+      "name": "eligibility",
+      "incumbentBytes": 145,
+      "incumbentTokens": 23,
+      "treatmentBytes": 112,
+      "treatmentTokens": 30,
+      "loweredBytes": 147,
+      "parity": true,
+      "manifestDigest": "63fc45fed6e03592923a1eee5e7b61c45692d803b875557db2794b3e057f1587"
+    },
+    {
+      "name": "gross",
+      "incumbentBytes": 196,
+      "incumbentTokens": 35,
+      "treatmentBytes": 167,
+      "treatmentTokens": 50,
+      "loweredBytes": 202,
+      "parity": true,
+      "manifestDigest": "894d234b6d5d06bf04fbf7cf45706e425b1dbd646b1576cdd9b27ca142df3276"
+    },
+    {
+      "name": "margin",
+      "incumbentBytes": 189,
+      "incumbentTokens": 33,
+      "treatmentBytes": 176,
+      "treatmentTokens": 54,
+      "loweredBytes": 195,
+      "parity": true,
+      "manifestDigest": "fa690840e90f73de1c9927efd6aa24ff3439ab8d785ed5a4794ba4bfc674cdf6"
+    },
+    {
+      "name": "priority",
+      "incumbentBytes": 172,
+      "incumbentTokens": 31,
+      "treatmentBytes": 126,
+      "treatmentTokens": 40,
+      "loweredBytes": 174,
+      "parity": true,
+      "manifestDigest": "e57e3b8747a8e1ff70aff7ad8b898618d4b6e409afd473eb85e388d568d41580"
+    },
+    {
+      "name": "quote",
+      "incumbentBytes": 255,
+      "incumbentTokens": 40,
+      "treatmentBytes": 232,
+      "treatmentTokens": 58,
+      "loweredBytes": 261,
+      "parity": true,
+      "manifestDigest": "496f8ded0535313e7d1a6797e13d6d4eff0641fc962998cafda3242d0c45f3d4"
+    },
+    {
+      "name": "ratio",
+      "incumbentBytes": 147,
+      "incumbentTokens": 27,
+      "treatmentBytes": 124,
+      "treatmentTokens": 41,
+      "loweredBytes": 153,
+      "parity": true,
+      "manifestDigest": "1115cebd9ce181ba9c69acd6342c572626229c21dda5834e463cbd382f4ded3a"
+    },
+    {
+      "name": "shipping",
+      "incumbentBytes": 162,
+      "incumbentTokens": 27,
+      "treatmentBytes": 118,
+      "treatmentTokens": 35,
+      "loweredBytes": 164,
+      "parity": true,
+      "manifestDigest": "4cd0d5d4c1903d25880e9a8eb11a340163fbd28981cf448b92610491e69132ae"
+    },
+    {
+      "name": "subtotal",
+      "incumbentBytes": 158,
+      "incumbentTokens": 23,
+      "treatmentBytes": 131,
+      "treatmentTokens": 33,
+      "loweredBytes": 160,
+      "parity": true,
+      "manifestDigest": "8aaa5369a8a7de2b60f041cda670852e97fbb5f128dd77207d36b3c34c21f5ec"
+    },
+    {
+      "name": "totals",
+      "incumbentBytes": 209,
+      "incumbentTokens": 40,
+      "treatmentBytes": 169,
+      "treatmentTokens": 56,
+      "loweredBytes": 215,
+      "parity": true,
+      "manifestDigest": "061bfbe5c6255c92548335f2cc032c31061ac0059b86ca207957208c7f7580af"
+    }
+  ],
+  "summary": {
+    "incumbentBytes": 1945,
+    "treatmentBytes": 1604,
+    "incumbentTokens": 331,
+    "treatmentTokens": 472
+  },
+  "semanticBoundary": "same bounded ALGAL expression and receipt contract; no live effects",
+  "checks": {
+    "expansionInspectable": true,
+    "expansionDeterministic": true,
+    "runtimeParity": true
+  },
+  "next": [
+    "add paired typo-repair tasks",
+    "measure verified iteration time across repeated edits",
+    "run holdout cases before changing the north-star language decision"
+  ]
+}

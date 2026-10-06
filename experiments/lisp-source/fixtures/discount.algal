@@ -1,0 +1,6 @@
+program discount(order: json) -> json {
+  budget { max_agent_calls: 0 }
+
+  let discount = order.total * 0.1
+  return { total: order.total - discount }
+}
