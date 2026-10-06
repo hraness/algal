@@ -45,7 +45,7 @@ fixture, and verify the resulting evidence offline. Runtime speed matters, but
 it is subordinate to a language that is cheap to change and a result that is
 cheap to trust.
 
-The language direction remains an open experiment. A Lisp-shaped authoring surface may improve live editing, macro-based domain languages, and repair, but programs-as-data alone do not establish those benefits. The paired comparison, acceptance thresholds, and current scaffold are recorded in [the Lisp-shaped source experiment](lisp-source-experiment.md). Until its parity and iteration-time gate passes, the current readable source language remains the incumbent and the durable runtime contract is unchanged.
+The first Lisp comparison is now evidence-bearing. Eleven paired fixtures lower through the real compiler with exact manifest parity; treatment source is 17.5% smaller in bytes but 42.6% larger in lexical tokens. This rules out a token-saving reason to redirect the runtime or replace the incumbent source language. The provisional direction is to keep ALGAL’s durable runtime and readable source as the contract, while exploring a Lisp-shaped authoring and repair workbench that lowers into that contract. The [Lisp-shaped source experiment](lisp-source-experiment.md) still requires timed edit sequences and deliberate repairs before the workbench becomes a default surface.
 
 The first implementation milestone is not a distributed BEAM replacement. It is
 a small actor/event laboratory that demonstrates the same behavior in the Bun
