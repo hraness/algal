@@ -5,7 +5,7 @@ eyebrow: Technique
 description: "Compare results, errors and execution records across implementations, then test the assumptions their shared code cannot reveal."
 cardTitle: "Comparing runtimes"
 cardDescription: "Use the same inputs to find disagreements in results, errors and records."
-updated: 2026-10-01
+updated: 2026-10-05
 ---
 
 Two implementations of a runtime can each pass their own tests while disagreeing on a valid input. Differential testing gives both the same program and compares what they do. Cross-checking their saved records adds another question: can each implementation understand the other's account of the run?

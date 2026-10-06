@@ -5,7 +5,7 @@ date: 2026-09-22
 description: An ALGAL receipt lets another person replay a recorded run offline and check how its inputs and saved answers produced its outputs.
 eyebrow: Technique
 cardDescription: "An ALGAL receipt replays an agent run offline."
-updated: 2026-10-01
+updated: 2026-10-05
 ---
 
 # What a replayable receipt proves
