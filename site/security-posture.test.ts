@@ -20,9 +20,11 @@ test("vercel.json sends baseline security headers on every path", () => {
   }
 });
 
-test("security.txt points at the advisory channel and carries a future expiry", () => {
+test("security.txt names the advisory and email channels and carries a future expiry", () => {
   const text = readFileSync(join(ROOT, "site/.well-known/security.txt"), "utf8");
   expect(text).toContain("Contact: https://github.com/hraness/algal/security/advisories/new");
+  expect(text).toContain("Contact: mailto:hraness@pm.me");
+  expect(text).toContain("Canonical: https://algal.computer/.well-known/security.txt");
   const expires = /^Expires: (.+)$/m.exec(text)?.[1];
   expect(expires).toBeDefined();
   expect(Date.parse(expires ?? "")).toBeGreaterThan(Date.now());
