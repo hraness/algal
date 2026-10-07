@@ -32,7 +32,7 @@ test("the home card shows the hero's eyebrow and H1 from the messaging record ho
   expect(home).toContain('class="hraness-marketing-hero__heading">{{SITE_HERO_HEADING}}</h1>');
   expect(HOME_SOCIAL_PAGE).toEqual({ layout: "product", eyebrow: productMessaging.category, headline: productMessaging.hero.heading, description: "" });
   expect(HOME_SOCIAL_PAGE.eyebrow).toBe("Agent programming language");
-  expect(HOME_SOCIAL_PAGE.headline).toBe("Write agent programs that wait, resume, and replay.");
+  expect(HOME_SOCIAL_PAGE.headline).toBe("Software that accumulates competence.");
 });
 
 test("the rendered card is a 1200 × 630 PNG", async () => {
@@ -45,7 +45,7 @@ test("the rendered card is a 1200 × 630 PNG", async () => {
 test("pages share the site card and posts get their own card from page copy only", () => {
   const meta = { page: "home", path: "/", title: "ALGAL", description: "d", ogTitle: "ALGAL" } as const;
   const home = pageDocument(meta, "<main id=\"main\"></main>");
-  expect(SITE_SOCIAL_IMAGE).toEqual({ path: "/og.png", alt: "ALGAL: Write agent programs that wait, resume, and replay." });
+  expect(SITE_SOCIAL_IMAGE).toEqual({ path: "/og.png", alt: "ALGAL: Software that accumulates competence." });
   expect(home).toContain('<meta property="og:image" content="https://algal.computer/og.png">');
   expect(home).toContain('<meta name="twitter:image" content="https://algal.computer/og.png">');
 

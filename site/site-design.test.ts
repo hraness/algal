@@ -82,13 +82,11 @@ test("page metadata is escaped, so a quote in a derived description cannot end t
   expect(document).toContain(JSON.stringify(SITE_DESCRIPTION));
 });
 
-test("the home and use-cases pages both state the prerelease limits from one constant", () => {
+test("the home and use-cases pages both describe where ALGAL runs from one constant", () => {
   for (const page of ["home.html", "use-cases.html"]) expect(pages[page]).toContain("{{ADOPTION_BOUNDARY}}");
-  for (const limit of ["prerelease", "unsigned and not notarized", "tool permissions", "OS isolation", "Multi-tenant service use", "store-wide quotas are not built yet"]) {
+  for (const limit of ["algal.cloud", "tool permissions", "habitat", "replay a run"]) {
     expect(ADOPTION_BOUNDARY).toContain(limit);
   }
-  expect(pages["home.html"]).toContain("exactly once");
-  expect(pages["use-cases.html"]).toContain("exactly once");
 });
 
 test("llms.txt takes its lead from the site description", () => {

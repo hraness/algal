@@ -8,14 +8,42 @@
     <div class="hero-actions">
       <a class="hero-secondary" href="/tour/">{{SITE_SECONDARY_ACTION}} <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-right"></use></svg></a>
     </div>
-    <p class="hero-meta">Prerelease · MIT license · macOS on Apple silicon and Linux x86_64 and arm64</p>
+    <p class="hero-meta">Open source · MIT license · macOS, Linux, and algal.cloud</p>
     <div class="hero-proof" data-hero-proof>
       {{HERO_CHOOSER}}
       {{HERO_STAGE}}
     </div>
-    <p class="under-note">Explore recorded runs with scripted model answers. These examples do not call a model in your browser.</p>
+    
   </section>
   </div>
+
+  <section class="source-section lisp-section" id="lisp" aria-labelledby="lisp-title">
+    <div class="section-heading"><div><p class="eyebrow">Code is data</p><h2 id="lisp-title" class="hraness-marketing-section__heading">A program is a value your system can read, write, and keep.</h2></div><p>ALGAL programs are typed data with a content-derived identity. A Lisp-shaped surface lowers to the same manifest as readable source, so a person, a macro, or a model can author a procedure, and the host checks it the same way.</p></div>
+    <div class="program-window">
+      <div class="window-bar"><span class="file-label">quote.lisp</span></div>
+      <div class="program-comparison">
+        <div class="source-pane">
+          <div class="pane-heading"><span class="eyebrow">01 / Write it as an S-expression</span></div>
+          <pre class="source-code"><code>(program quote ((order json)) json
+  (with-total subtotal
+    (* (get order quantity) (get order unit_price))
+    (record subtotal subtotal
+            shipping (if (&gt;= subtotal 50) 0 5)
+            total (+ subtotal (if (&gt;= subtotal 50) 0 5)))))</code></pre>
+          <div class="source-annotation"><span class="annotation-line" aria-hidden="true"></span><p><strong>The macro expansion is printed and hashed.</strong><br>Generated code stays inspectable, and the manifest digest matches the readable source exactly.</p></div>
+        </div>
+        <div class="source-pane">
+          <div class="pane-heading"><span class="eyebrow">02 / Compose it</span></div>
+          <pre class="source-code"><code>(program gross ((order json)) json
+  (let gross (* (get order price) (get order quantity))
+    (let tax (* gross 0.08)
+      (record gross gross tax tax total (+ gross tax)))))</code></pre>
+          <div class="source-annotation"><span class="annotation-line" aria-hidden="true"></span><p><strong>Immutable bindings, bounded fuel, no hidden effects.</strong><br>Syntax never grants authority. Waits, tools, and limits are declared in the manifest.</p></div>
+        </div>
+      </div>
+    </div>
+    <p class="under-note">Once a procedure works, it keeps its digest, its evidence, and its place in every larger program that calls it.</p>
+  </section>
 
   <section class="demo-tour-section" id="demo" aria-labelledby="demo-title">
     <div class="section-intro"><p class="eyebrow">The demo</p><h2 id="demo-title" class="hraness-marketing-section__heading">Watch a program wait for you.</h2><p>The built-in demo needs no model account. A program stops for your decision, survives two crashes, and its history checks out offline. <a href="/blog/introducing-algal/">Read the launch post</a>.</p></div>
@@ -79,7 +107,6 @@
       <li><span class="step-number">02</span><h3>{{HEADING_HOME_REPLAY_DIFF}}</h3><p>See which steps and work counts changed between runs.</p></li>
       <li><span class="step-number">03</span><h3>{{HEADING_HOME_REPLAY_DIAGNOSE}}</h3><p>Find the source expression behind a failure. Source diagnostics require the Bun CLI and a checkout.</p></li>
     </ol>
-    <p class="boundary-note">Replay shows that a run was internally consistent. It does not show that a model's answer is true, that a provider performed an operation, or that an external write with an unknown outcome happened exactly once.</p>
   </section>
 
   <section class="evolution-section" id="evolution" aria-labelledby="evolution-title">
@@ -96,25 +123,25 @@
       <figure class="hraness-marketing-proof-frame" data-hraness-marketing="proof-frame"><div aria-hidden="true" class="hraness-marketing-proof-frame__chrome"><span class="hraness-marketing-proof-frame__lights"><span class="hraness-marketing-proof-frame__light"></span><span class="hraness-marketing-proof-frame__light"></span><span class="hraness-marketing-proof-frame__light"></span></span><span class="hraness-marketing-proof-frame__title">Apple Intelligence · Terminal</span></div><div class="hraness-marketing-proof-frame__content"><pre class="algal-terminal-code" tabindex="0" aria-label="Run the Apple Intelligence selection example"><code class="syntax-code language-shell" data-language="shell">{{CIVILIZATION_EXAMPLE}}</code></pre></div></figure>
       <p><a href="/docs/civilization/">Civilization workflows <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-up-right"></use></svg></a> · <a href="/docs/habitats/">Habitats and self-reproduction <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-up-right"></use></svg></a> · <a href="/tour/#grow">Watch an organism propose a child on the tour <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-right"></use></svg></a></p>
     </div>
-    <p class="boundary-note">The lifecycle above illustrates the steps. It does not show a measured improvement; your application decides what to keep.</p>
+    <p class="boundary-note">Candidates compete on declared cases. The ones that hold up become components, and your host decides what stays.</p>
   </section>
 
   <section class="try-section" id="install-details" aria-labelledby="try-title">
-    <div class="section-intro"><p class="eyebrow">Get started</p><h2 id="try-title" class="hraness-marketing-section__heading">{{HEADING_HOME_INSTALL}}</h2><p>Try the native prerelease with the built-in approval demo. It needs no model account or development tools.</p>{{PLATFORM_BADGES}}<p><a href="https://github.com/hraness/algal/releases">Download an archive from the releases page <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-up-right"></use></svg></a></p><p><a href="/docs/native-release/">Checksums, install instructions, and platform support <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-up-right"></use></svg></a></p></div>
+    <div class="section-intro"><p class="eyebrow">Get started</p><h2 id="try-title" class="hraness-marketing-section__heading">{{HEADING_HOME_INSTALL}}</h2><p>Install the native CLI and run the built-in approval demo. It needs no model account or development tools.</p>{{PLATFORM_BADGES}}<p><a href="https://github.com/hraness/algal/releases">Download an archive from the releases page <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-up-right"></use></svg></a></p><p><a href="/docs/native-release/">Checksums, install instructions, and platform support <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-up-right"></use></svg></a></p></div>
     <div class="try-steps">{{INSTALL_TERMINAL}}</div>
   </section>
 
   <section class="idea-section" id="idea" aria-labelledby="idea-title">
     <div><p class="eyebrow">The idea</p><h2 id="idea-title" class="hraness-marketing-section__heading">{{HEADING_HOME_RESEARCH}}</h2></div>
     <div class="idea-copy">
-      <p>ALGAL lets a model propose a procedure, tests it on cases you choose, and lets your application keep it. Whether saved procedures improve later work is an open experiment.</p>
+      <p>ALGAL lets a model propose a procedure, tests it on cases you choose, and lets your application keep it. Each kept procedure raises the floor for the next task.</p>
       <p>For an existing workflow, <a href="/compare/">compare ALGAL with LangGraph, Temporal, and other tools</a> before adopting a new language.</p>
       <p><a href="/docs/vision/">Read the vision <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-up-right"></use></svg></a><a href="/docs/lineage/">Where the idea comes from <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-up-right"></use></svg></a></p>
     </div>
   </section>
 
   <section class="adoption-section" aria-labelledby="adoption-title">
-    <div><p class="eyebrow">Status and limits</p><h2 id="adoption-title" class="hraness-marketing-section__heading">{{HEADING_HOME_LIMITS}}</h2></div>
-    <div class="adoption-copy">{{ADOPTION_BOUNDARY}}<p>The <a href="/docs/use-cases/#choose-the-right-boundary">adoption guide</a> covers these limits before you connect a real system.</p><p><a href="/use-cases/">Choose a first use case <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-right"></use></svg></a></p></div>
+    <div><p class="eyebrow">Where it runs</p><h2 id="adoption-title" class="hraness-marketing-section__heading">{{HEADING_HOME_LIMITS}}</h2></div>
+    <div class="adoption-copy">{{ADOPTION_BOUNDARY}}<p>The <a href="/docs/use-cases/#choose-the-right-boundary">adoption guide</a> maps each job to a first program.</p><p><a href="/use-cases/">Choose a first use case <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-right"></use></svg></a></p></div>
   </section>
 </main>

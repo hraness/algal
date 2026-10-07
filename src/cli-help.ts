@@ -9,7 +9,7 @@ type Group = { readonly title: string; readonly rows: readonly Row[] };
 
 /** Registry description (portfolio messaging record, product `algal`). */
 export const DESCRIPTION =
-  "ALGAL is a programming language and VM for AI agent programs that wait for approval and leave receipts you can replay.";
+  "ALGAL is a programming language and VM where agent work becomes typed, tested, reusable procedures that wait for approval, survive crashes, and leave receipts you can replay.";
 
 const RECEIPT_GLOSS = "A receipt is the saved record of every step a run took.";
 

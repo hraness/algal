@@ -18,26 +18,26 @@
       ]
     },
     "category": "Agent programming language",
-    "tagline": "Programs for agents that wait and resume",
-    "short": "Language and VM for agent programs that wait for approval and resume",
-    "meta": "ALGAL is a programming language and VM for AI agent programs that wait for approval and leave receipts you can replay.",
-    "medium": "ALGAL is a programming language and VM for AI agent programs. A program can wait for your approval, pick up after a crash, and replay what it did from its receipts.",
-    "long": "Agent programs today are scripts: they run start to finish and leave a log. ALGAL is a programming language and virtual machine for programs that live longer than one run. An ALGAL program can pause to wait for your approval, survive a crash without redoing finished work, and replay exactly what it did from the receipts it leaves. The VM is previewing now, and the language toolchain ships with it. ALGAL is free and open source.",
+    "tagline": "Software that accumulates competence",
+    "short": "A language and VM where agent programs wait, resume, and compound into reusable skill",
+    "meta": "ALGAL is a programming language and VM where agent work becomes typed, tested, reusable procedures that wait for approval, survive crashes, and leave receipts you can replay.",
+    "medium": "ALGAL is a programming language and VM for agent programs. Programs wait for your approval, resume after a crash, and leave receipts you can replay. Work that succeeds is kept as a typed procedure with its evidence, so the next task starts further along.",
+    "long": "Most software stops getting smarter when a run ends. ALGAL keeps what worked. A model proposes a bounded program, the host checks it, measures it on declared cases, and keeps it with its evidence. Programs call programs by digest, wait for a person for as long as it takes, survive a crash without redoing finished work, and replay exactly what they did from their receipts. Every success becomes a component you can reuse, compose, and improve. ALGAL is free and open source, and algal.cloud hosts it as habitats that keep your programs running.",
     "hero": {
-      "heading": "Write agent programs that wait, resume, and replay.",
-      "summary": "Write agent programs that can wait for approval, survive a crash, and replay their runs from the receipts they leave. Resume from the last receipt instead of starting over.",
+      "heading": "Software that accumulates competence.",
+      "summary": "ALGAL is a language and VM where agent programs wait for you, survive crashes, and leave receipts. Work that succeeds becomes a typed, tested procedure the next task can call.",
       "primaryAction": "Install ALGAL",
-      "secondaryAction": "See a program run"
+      "secondaryAction": "Read a program"
     },
     "headings": {
       "home-draft": "Turn an email into a drafted reply.",
       "home-process": "Keep a task running across interruptions.",
       "home-host": "Your host sets the tools, models, and limits.",
       "home-replay": "Every run can be replayed offline.",
-      "home-evolution": "Programs write programs. Your host picks which to keep.",
+      "home-evolution": "Programs write programs. Evidence picks which to keep.",
       "home-install": "Install one binary. Run your first program.",
-      "home-research": "Can tested procedures improve later work?",
-      "home-limits": "Start locally. Know what you operate.",
+      "home-research": "Every success becomes a component.",
+      "home-limits": "Run it on your machine or in a habitat.",
       "home-replay-verify": "Verify",
       "home-replay-diff": "Diff",
       "home-replay-diagnose": "Diagnose"

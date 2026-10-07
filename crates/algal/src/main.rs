@@ -74,7 +74,7 @@ impl app_memory::MemoryAdmission for NoAdmission {
 #[command(
     name = "algal",
     version,
-    about = "ALGAL is a programming language and VM for AI agent programs that wait for approval and leave receipts you can replay."
+    about = "ALGAL is a programming language and VM where agent work becomes typed, tested, reusable procedures that wait for approval, survive crashes, and leave receipts you can replay."
 )]
 struct Cli {
     /// Skip the automatic release check for this invocation.
