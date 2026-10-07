@@ -652,6 +652,8 @@ await cp(join(ROOT, "examples/malleable-site/model-cost-evidence.json"), join(DI
 for (const f of ["robots.txt", "favicon.svg", "favicon-48.png", "apple-touch-icon.png", "algal-mark.svg"]) {
   await cp(join(SITE, f), join(DIST, f));
 }
+await mkdir(join(DIST, ".well-known"), { recursive: true });
+await cp(join(SITE, ".well-known/security.txt"), join(DIST, ".well-known/security.txt"));
 // Blog posts joined to their review records; see site/blog.ts.
 const blogPosts = await loadBlogPosts(join(SITE, "blog"));
 // Share images come only from the site declaration in site/social-image.ts.
