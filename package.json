@@ -124,7 +124,7 @@
     "@hraness/posthog": "https://github.com/hraness/posthog/releases/download/v0.3.11/hraness-posthog-0.3.11.tgz",
     "@hraness/ui": "github:hraness/ui#v0.5.18",
     "@hraness/web-discovery": "github:hraness/web-discovery#v0.13.0",
-    "@hugeicons/core-free-icons": "4.3.0",
+    "@hugeicons/core-free-icons": "4.3.5",
     "@mlc-ai/web-llm": "0.2.85",
     "@resvg/resvg-js": "2.6.2",
     "@types/bun": "^1.2.0",
