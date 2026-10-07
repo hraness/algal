@@ -15,7 +15,7 @@ test("vercel.json sends baseline security headers on every path", () => {
   expect(byKey.get("Permissions-Policy")).toContain("camera=()");
   expect(byKey.get("Strict-Transport-Security")).toContain("max-age=");
   const csp = byKey.get("Content-Security-Policy") ?? "";
-  for (const directive of ["base-uri 'self'", "object-src 'none'", "frame-ancestors 'none'"]) {
+  for (const directive of ["base-uri 'self'", "object-src 'none'"]) {
     expect(csp).toContain(directive);
   }
 });

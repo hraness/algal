@@ -16,7 +16,7 @@ export async function startWorkbenchServer(options: { directory: string; assets:
   await workbench.capture(); // Refuse a missing/corrupt host before opening a socket.
   const token = randomBytes(32).toString("hex");
   let origin = "";
-  const headers = { "cache-control": "no-store", "x-content-type-options": "nosniff", "referrer-policy": "no-referrer", "content-security-policy": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'" };
+  const headers = { "cache-control": "no-store", "x-content-type-options": "nosniff", "referrer-policy": "no-referrer", "content-security-policy": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'" };
   const json = (value: unknown, status = 200) => Response.json(value, { status, headers });
   const server = Bun.serve({ hostname: "127.0.0.1", port: options.port ?? 0, maxRequestBodySize: WORKBENCH_LIMITS.recordBytes,
     async fetch(request) {
