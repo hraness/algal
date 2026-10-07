@@ -1,0 +1,5 @@
+Contact: https://github.com/hraness/algal/security/advisories/new
+Expires: 2027-10-07T00:00:00.000Z
+Policy: https://github.com/hraness/algal/blob/main/SECURITY.md
+Canonical: https://algal.computer/.well-known/security.txt
+Preferred-Languages: en
