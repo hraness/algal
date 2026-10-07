@@ -9,8 +9,8 @@ store tampering — please report it.
 ## Reporting
 
 Open a private security advisory on the GitHub repository
-(`hraness/algal`, Security → Advisories). That is the only reporting channel.
-Please include a manifest or receipt that demonstrates the issue where possible.
+(`hraness/algal`, Security → Advisories). If GitHub reporting is unavailable,
+email [hraness@pm.me](mailto:hraness@pm.me). Please include a manifest or receipt that demonstrates the issue where possible.
 
 Do not open a public issue for an unpatched vulnerability.
 
