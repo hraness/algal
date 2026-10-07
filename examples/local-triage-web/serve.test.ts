@@ -11,6 +11,7 @@ test("web presentation shares exact-head commands and persistent drafts while re
   const server = await serveTriage({ directory }), authorization = `Bearer ${new URL(server.url).hash.slice(7)}`;
   const post = (path: string, body: unknown, headers: Record<string, string> = {}) => fetch(server.origin + path, { method: "POST", headers: { authorization, "content-type": "application/json", ...headers }, body: JSON.stringify(body) });
   try {
+    expect((await fetch(server.origin + "/api/open")).headers.get("content-security-policy")).toContain("frame-ancestors 'none'");
     expect((await fetch(server.origin + "/api/open")).status).toBe(403);
     expect((await fetch(server.origin + "/api/open", { headers: { authorization, host: "foreign.invalid" } })).status).toBe(403);
     expect((await fetch(server.origin + "/api/open", { headers: { authorization, "sec-fetch-site": "cross-site" } })).status).toBe(403);

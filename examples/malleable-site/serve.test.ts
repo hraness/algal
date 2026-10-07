@@ -29,7 +29,7 @@ test("local workbench requires owner token and origin, fences commands, and serv
     const page = await fetch(server.origin + "/workbench/");
     expect(page.status).toBe(200);
     expect(page.headers.get("referrer-policy")).toBe("no-referrer");
-    expect(page.headers.get("content-security-policy")).not.toContain("frame-ancestors");
+    expect(page.headers.get("content-security-policy")).toContain("frame-ancestors 'none'");
     await writeFile(join(directory, "private.json"), JSON.stringify({ retained: "outside asset root" }));
     await symlink(join(directory, "private.json"), join(assets, "escape.json"));
     await symlink(directory, join(assets, "escape-directory"));
