@@ -1,10 +1,10 @@
 # ALGAL
 
 > 🌱 ALGAL is a programming language for agent programs that outlive a single
-> run. A program can pause for your approval, pick up after a crash without
+> run. A program can pause for your approval, resume after a crash without
 > redoing finished work, and leave receipts that replay exactly what it did.
-> When work succeeds, ALGAL keeps it as a typed procedure with its evidence, so
-> the next program starts from what the last one learned.
+> Work that succeeds is kept as a typed procedure with its evidence, so the next
+> program starts from what the last one learned.
 >
 > Ask your agent to set it up: https://algal.computer
 >

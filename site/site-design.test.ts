@@ -134,3 +134,15 @@ test("each Vercel alias host redirects on its own rule", () => {
   for (const host of ["algal.vercel.app", "algal-hraness.vercel.app", "algal-teal.vercel.app", "algal.dev", "www.algal.dev", "www.algal.computer"]) expect(hosts).toContain(host);
   for (const rule of config.redirects) expect(rule).toMatchObject({ destination: "https://algal.computer/$1", permanent: true });
 });
+
+test("the home page sets the founder's note directly below the hero in a serif face", () => {
+  const home = pages["home.html"]!;
+  expect(home.indexOf("hero-title")).toBeLessThan(home.indexOf('class="founder-note"'));
+  expect(home.indexOf('class="founder-note"')).toBeLessThan(home.indexOf('id="lisp"'));
+  expect(home).toContain("ALGAL is a programming language for agent programs that outlive a single run.");
+  expect(home).toContain('<a href="https://algal.computer">algal.computer</a>');
+  const styles = readFileSync(join(SITE, "styles.css"), "utf8");
+  const noteRule = styles.slice(styles.indexOf(".founder-note__body p {"));
+  expect(noteRule).toContain('"Instrument Serif"');
+  expect(noteRule.slice(0, noteRule.indexOf("}"))).not.toContain("Georgia");
+});
