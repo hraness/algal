@@ -8,7 +8,7 @@ import { triagePage } from "./page";
 export async function serveTriage(options: { directory: string; application?: string; port?: number }) {
   const host = new TriageHost(options.directory, options.application); await host.capture();
   const token = randomBytes(32).toString("hex"), nonce = randomBytes(24).toString("base64"); let origin = "";
-  const headers = { "cache-control": "no-store", "x-content-type-options": "nosniff", "referrer-policy": "no-referrer", "content-security-policy": `default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}'; connect-src 'self'; base-uri 'none'` };
+  const headers = { "cache-control": "no-store", "x-content-type-options": "nosniff", "referrer-policy": "no-referrer", "content-security-policy": `default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'` };
   const json = (value: unknown, status = 200) => Response.json(value, { status, headers });
   const server = Bun.serve({ hostname: "127.0.0.1", port: options.port ?? 0, maxRequestBodySize: 16_384, async fetch(request) {
     const url = new URL(request.url);
