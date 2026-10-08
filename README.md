@@ -1,56 +1,84 @@
 # ALGAL
 
-**Write agent programs that wait, resume, and replay.**
+> 🌱 ALGAL is a programming language for agent programs that outlive a single
+> run. A program can pause for your approval, resume after a crash without
+> redoing finished work, and leave receipts that replay exactly what it did.
+> Work that succeeds is kept as a typed procedure with its evidence, so the next
+> program starts from what the last one learned.
+>
+> Ask your agent to set it up: https://algal.computer
+>
+> — Ben Guo
 
-ALGAL is a programming language and VM for AI agent programs. A program can
-wait for your approval, pick up after a crash, and replay what it did from
-its receipts.
+**Software that accumulates competence.**
 
-The long-term direction is a substrate where these programs become durable,
-composable capabilities inside governed agent ecologies. The [vision](docs/vision.md)
-and [North Star plan](docs/north-star.md) describe that direction and the
-evidence required to earn it.
+```lisp
+(program quote ((order json)) json
+  (with-total subtotal
+    (* (get order quantity) (get order unit_price))
+    (record subtotal subtotal
+            shipping (if (>= subtotal 50) 0 5)
+            total (+ subtotal (if (>= subtotal 50) 0 5)))))
+```
 
-Use it when an AI-assisted task needs to wait for a person, survive a CLI
-restart, reuse completed work, or explain what happened without calling the
-model again. Your host application chooses the tools and permissions; the
-program declares its decisions, limits, and approval points. A native Rust
-CLI and a Bun runtime that runs on its own implement the same specifications
-for programs, receipts, and durable processes. [algal.computer](https://algal.computer)
-has the tour, the docs, and the blog.
+ALGAL is a programming language and VM where a program is a value. It has a
+content-derived identity, a declared interface, and limits it cannot widen.
+A Lisp-shaped surface and the readable `.algal` source lower to the same
+manifest, so a person, a macro, or a model can write a procedure and the host
+checks it the same way. The macro expansion is printed and hashed, and all
+eleven paired programs in [the source experiment](docs/lisp-source-experiment.md)
+produce exactly the same manifest digest as their readable twins.
 
-Preview: native prereleases for macOS on Apple silicon and Linux x86_64 and
-arm64 are on the [releases page](https://github.com/hraness/algal/releases)
-(`curl -fsSL https://algal.computer/install.sh | sh`), and the Bun runtime runs
-from this checkout.
+```lisp
+(program gross ((order json)) json
+  (let gross (* (get order price) (get order quantity))
+    (let tax (* gross 0.08)
+      (record gross gross tax tax total (+ gross tax)))))
+```
 
-From `v0.2.0-vm.13`, verified macOS and Linux installs update automatically
-within the `vm` preview channel. `algal update disable` turns automatic updates
-off; `algal update` installs a newer verified preview now. Explicit versions,
-CI, offline verification and hash-pinned SDK calls stay fixed. The Bun runtime
-keeps its existing source or package-manager update workflow. See
-[native CLI updates](docs/native-release.md#updates).
+Programs wait for your approval for as long as it takes, resume after a crash
+without redoing finished work, and leave receipts that replay offline. When a
+procedure works, ALGAL keeps it with its evidence: a typed component any larger
+program can call by digest. Every success makes the next task start further
+along, and a fixed model works inside an environment that keeps getting more
+capable.
+
+[algal.computer](https://algal.computer) has the tour, the docs, and the blog.
+[algal.cloud](https://algal.cloud) runs ALGAL as habitats: hosted homes where
+your programs keep running, keep their receipts, and keep improving.
+
+Install the native CLI on macOS (Apple silicon) or Linux (x86_64 and arm64)
+with `curl -fsSL https://algal.computer/install.sh | sh`. Verified installs
+update automatically within the `vm` channel: `algal update disable` turns that
+off and `algal update` installs the newest verified build now. Explicit
+versions, CI, offline verification, and hash-pinned SDK calls stay fixed. See
+[native CLI updates](docs/native-release.md#updates). The Bun runtime runs from
+this checkout.
 
 ## The idea
 
-The bet behind ALGAL is that a computer can accumulate tested ways of acting,
-not only produce new answers or new code. A model proposes a bounded,
-executable procedure. The procedure is checked, measured on declared cases,
-kept with its evidence, composed into larger procedures, and revised under
-rules the host sets. Useful work should leave the computer with a more
-capable, reusable way of doing the next piece of work.
+A computer should be able to accumulate tested ways of acting, not only produce
+new answers or new code. A model proposes a bounded, executable procedure. The
+procedure is checked, measured on declared cases, kept with its evidence,
+composed into larger procedures, and revised under rules the host sets. Useful
+work leaves the computer with a more capable, reusable way of doing the next
+piece of work.
 
-Four properties of the design give that bet a testable form: an organism (an
-ALGAL program) has a content-derived identity and a declared interface, so
-successful reasoning can become a reusable component; manifests are data built
-to be generated and checked, so hand-written and model-proposed procedures
-enter through the same admission path; model judgment sits in typed cells with
-declared context and budgets, so ordinary computation supplies the discipline
-around it; and selection is a host decision recorded on the receipt, so
-provenance and permission are part of the mechanism rather than features added
-later. The mechanisms exist today. Whether accumulated procedures make later
-work measurably better than equally resourced alternatives is the open
-question. The [vision](docs/vision.md) states the bet in full and the
+Four properties give that idea its shape:
+
+- **Reasoning becomes structure.** An organism (an ALGAL program) has a
+  content-derived identity and a declared interface, so one program calls
+  another by digest.
+- **Procedures are data.** Manifests are built to be generated and checked, so
+  hand-written and model-proposed procedures enter through one admission path.
+- **Judgment is typed.** Model decisions sit in cells with declared context and
+  budgets, and ordinary computation supplies the discipline around them.
+- **Selection is recorded.** The host picks which successor to keep, and the
+  receipt carries the provenance and the permission.
+
+The [vision](docs/vision.md) states the loop in full: declare a responsibility,
+compile it into a bounded graph, run it with continuity, reconcile changed
+evidence, retain what improves, and carry improvements into every consumer. The
 [lineage](docs/lineage.md) places it among Lisp, Emacs, Smalltalk, Urbit,
 Engelbart, and the research on self-improving programs.
 
@@ -74,7 +102,7 @@ once the workflow proves useful.
 
 ## Try the VM with one executable
 
-Install the native prerelease into `~/.local/bin` on macOS (Apple silicon) or
+Install the native CLI into `~/.local/bin` on macOS (Apple silicon) or
 Linux (x86_64 or arm64). The script checks the archive's SHA-256 and the executable's
 recorded digest before it installs anything:
 
@@ -148,19 +176,15 @@ reading, and HTTP bodies have a deadline. Handled failures still consume the
 work budget before a recovery effect can run. See the
 [manifest and transport limits](spec/v1/organism.md) for the exact contract.
 
-### Adoption boundary
+### Your host sets the boundary
 
-ALGAL is working **prerelease software for workflows your own host application
-controls**. Native packages are unsigned and not notarized. ALGAL is an
-application VM, not an OS sandbox, so host tools keep their normal permissions.
-Coding jobs and the PR shepherd currently need the Bun host. There is no
-multi-tenant service, distributed custody (moving process ownership between
-machines), store-wide storage quota, or retention service. If a write's outcome
-is unknown, your host must confirm what happened before retrying it. A receipt
-that verifies shows the run was internally consistent; it does not show that
-its outputs are factually true or that an arbitrary external write happened
-exactly once. Read the [operating boundary](docs/use-cases.md#choose-the-right-boundary)
-before you deploy.
+An ALGAL program runs inside your application, under the tools, models, and
+limits your host grants. Tool permissions stay with the host, and a program
+cannot widen them. When a write's outcome is unknown, the process holds until
+your host confirms what happened, then continues from the receipt. A verified
+receipt shows the run was internally consistent and the effects it names were
+recorded. The [operating boundary](docs/use-cases.md#choose-the-right-boundary)
+maps each job to the host that runs it.
 
 The application lifecycle does enforce conservative [namespace byte limits](spec/v1/application.md#conservative-namespace-quota);
 they do not count shared content-addressed objects against any one application.
@@ -414,8 +438,7 @@ terminal result after a lost acknowledgement without launching the job again.
 The current delegated-coding adapter remains conservative when its outcome is unknown.
 [Native release packages](docs/native-release.md) distribute the process kernel
 for Ubuntu 24.04 x86_64 and macOS 14+ Apple silicon without Bun or Cargo. The
-repair and GitHub integration hosts still require Bun. These are qualified
-prerelease surfaces, not a claim that every provider or deployment is production-ready.
+repair and GitHub integration hosts still require Bun. 
 
 ### Grow a population of programs
 

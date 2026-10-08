@@ -82,13 +82,11 @@ test("page metadata is escaped, so a quote in a derived description cannot end t
   expect(document).toContain(JSON.stringify(SITE_DESCRIPTION));
 });
 
-test("the home and use-cases pages both state the prerelease limits from one constant", () => {
+test("the home and use-cases pages both describe where ALGAL runs from one constant", () => {
   for (const page of ["home.html", "use-cases.html"]) expect(pages[page]).toContain("{{ADOPTION_BOUNDARY}}");
-  for (const limit of ["prerelease", "unsigned and not notarized", "tool permissions", "OS isolation", "Multi-tenant service use", "store-wide quotas are not built yet"]) {
+  for (const limit of ["algal.cloud", "tool permissions", "habitat", "replay a run"]) {
     expect(ADOPTION_BOUNDARY).toContain(limit);
   }
-  expect(pages["home.html"]).toContain("exactly once");
-  expect(pages["use-cases.html"]).toContain("exactly once");
 });
 
 test("llms.txt takes its lead from the site description", () => {
@@ -135,4 +133,16 @@ test("each Vercel alias host redirects on its own rule", () => {
   const hosts = config.redirects.map(rule => rule.has![0]!.value);
   for (const host of ["algal.vercel.app", "algal-hraness.vercel.app", "algal-teal.vercel.app", "algal.dev", "www.algal.dev", "www.algal.computer"]) expect(hosts).toContain(host);
   for (const rule of config.redirects) expect(rule).toMatchObject({ destination: "https://algal.computer/$1", permanent: true });
+});
+
+test("the home page sets the founder's note directly below the hero in a serif face", () => {
+  const home = pages["home.html"]!;
+  expect(home.indexOf("hero-title")).toBeLessThan(home.indexOf('class="founder-note"'));
+  expect(home.indexOf('class="founder-note"')).toBeLessThan(home.indexOf('id="lisp"'));
+  expect(home).toContain("ALGAL is a programming language for agent programs that outlive a single run.");
+  expect(home).toContain('<a href="https://algal.computer">algal.computer</a>');
+  const styles = readFileSync(join(SITE, "styles.css"), "utf8");
+  const noteRule = styles.slice(styles.indexOf(".founder-note__body p {"));
+  expect(noteRule).toContain('"Instrument Serif"');
+  expect(noteRule.slice(0, noteRule.indexOf("}"))).not.toContain("Georgia");
 });

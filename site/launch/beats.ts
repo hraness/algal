@@ -24,8 +24,8 @@ const authoredBeats: readonly LaunchBeat[] = [
   {
     id: "what",
     part: "what",
-    headline: "ALGAL runs agent programs that stop and wait for you",
-    post: "ALGAL is a programming language and VM for AI agent programs. A program can stop before it acts, hold until you say yes, pick up after a crash, and replay exactly what it did.",
+    headline: "ALGAL is a language and VM for software that accumulates competence",
+    post: "ALGAL is a language and VM for software that accumulates competence. Programs hold for your yes, resume after a crash, and replay what they did. What works is kept and reused.",
     visual: { kind: "mockup", id: "first-run", state: {} },
     alt: "Illustration of a terminal: algal demo start stops with status waiting and points to a local report page.",
   },
@@ -77,9 +77,9 @@ const authoredBeats: readonly LaunchBeat[] = [
   {
     id: "vision",
     part: "vision",
-    headline: "The bet: software that gets better at its job",
-    post: "ALGAL programs are data you can read, compare, and replay. The bet is that a computer can keep tested ways of working and reuse them on the next task. That is an open experiment, not a result yet.",
-    socialPost: "ALGAL programs are data you can read, compare, and replay. The bet is that a computer can keep tested ways of working and reuse them on the next task.",
+    headline: "Software that gets better at its job",
+    post: "ALGAL programs are data you can read, compare, and replay. A computer keeps tested ways of working and reuses them on the next task, so each success starts the next one further along.",
+    socialPost: "ALGAL programs are data you can read, compare, and replay. A computer keeps tested ways of working and reuse them on the next task.",
     visual: { kind: "diagram", src: "/diagrams/refine.svg" },
     alt: "Diagram of the refine example, an ALGAL program that revises a draft in a loop, then ships or holds it.",
     detailHref: "/docs/vision/",

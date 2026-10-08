@@ -9,7 +9,7 @@ The status is Preview. Only the last post of each thread links to the launch pos
 Post 1 of 8, 175 characters
 
 ```text
-ALGAL is a programming language and VM for AI agent programs. A program can stop before it acts, hold until you say yes, pick up after a crash, and replay exactly what it did.
+ALGAL is a language and VM for software that accumulates competence. Programs hold for your yes, resume after a crash, and replay what they did. What works is kept and reused.
 ```
 
 Post 2 of 8, 177 characters
@@ -42,10 +42,10 @@ Post 6 of 8, 122 characters
 ALGAL is for developers whose agents send messages, change code, or publish files, where one wrong action costs something.
 ```
 
-Post 7 of 8, 150 characters
+Post 7 of 8, 131 characters
 
 ```text
-ALGAL programs are data you can read, compare, and replay. The bet is that a computer can keep tested ways of working and reuse them on the next task.
+ALGAL programs are data you can read, compare, and replay. A computer keeps tested ways of working and reuse them on the next task.
 ```
 
 Post 8 of 8, 235 characters
@@ -61,7 +61,7 @@ https://algal.computer/blog/introducing-algal/
 Post 1 of 8, 175 characters
 
 ```text
-ALGAL is a programming language and VM for AI agent programs. A program can stop before it acts, hold until you say yes, pick up after a crash, and replay exactly what it did.
+ALGAL is a language and VM for software that accumulates competence. Programs hold for your yes, resume after a crash, and replay what they did. What works is kept and reused.
 ```
 
 Post 2 of 8, 177 characters
@@ -94,10 +94,10 @@ Post 6 of 8, 122 characters
 ALGAL is for developers whose agents send messages, change code, or publish files, where one wrong action costs something.
 ```
 
-Post 7 of 8, 150 characters
+Post 7 of 8, 131 characters
 
 ```text
-ALGAL programs are data you can read, compare, and replay. The bet is that a computer can keep tested ways of working and reuse them on the next task.
+ALGAL programs are data you can read, compare, and replay. A computer keeps tested ways of working and reuse them on the next task.
 ```
 
 Post 8 of 8, 235 characters
@@ -113,7 +113,7 @@ https://algal.computer/blog/introducing-algal/
 Post 1 of 8, 175 characters
 
 ```text
-ALGAL is a programming language and VM for AI agent programs. A program can stop before it acts, hold until you say yes, pick up after a crash, and replay exactly what it did.
+ALGAL is a language and VM for software that accumulates competence. Programs hold for your yes, resume after a crash, and replay what they did. What works is kept and reused.
 ```
 
 Post 2 of 8, 177 characters
@@ -146,10 +146,10 @@ Post 6 of 8, 122 characters
 ALGAL is for developers whose agents send messages, change code, or publish files, where one wrong action costs something.
 ```
 
-Post 7 of 8, 150 characters
+Post 7 of 8, 131 characters
 
 ```text
-ALGAL programs are data you can read, compare, and replay. The bet is that a computer can keep tested ways of working and reuse them on the next task.
+ALGAL programs are data you can read, compare, and replay. A computer keeps tested ways of working and reuse them on the next task.
 ```
 
 Post 8 of 8, 235 characters
@@ -163,7 +163,7 @@ https://algal.computer/blog/introducing-algal/
 ## LinkedIn post
 
 ```text
-ALGAL is a programming language and VM for AI agent programs. A program can stop before it acts, hold until you say yes, pick up after a crash, and replay exactly what it did.
+ALGAL is a language and VM for software that accumulates competence. Programs hold for your yes, resume after a crash, and replay what they did. What works is kept and reused.
 
 The demo records a proposed local publication and waits. Read the action on its report page, then approve or deny it with one command. Denying it leaves that publication undone.
 
@@ -175,7 +175,7 @@ Export a run to one file and check it on another machine with algal demo verify.
 
 ALGAL is for developers whose agents send messages, change code, or publish files, where one wrong action costs something.
 
-ALGAL programs are data you can read, compare, and replay. The bet is that a computer can keep tested ways of working and reuse them on the next task.
+ALGAL programs are data you can read, compare, and replay. A computer keeps tested ways of working and reuse them on the next task.
 
 Status: Preview. ALGAL runs on macOS on Apple silicon, and Linux on x86_64 and Arm. The free, open source demo needs no model account: install with one command, then run algal demo start.
 
@@ -197,7 +197,7 @@ Topics: Developer Tools, Artificial Intelligence, Open Source
 ## Show HN and first comment fact sheet
 
 - Write agent programs that wait, resume, and replay.
-- ALGAL is a programming language and VM for AI agent programs. A program can stop before it acts, hold until you say yes, pick up after a crash, and replay exactly what it did.
+- ALGAL is a language and VM for software that accumulates competence. Programs hold for your yes, resume after a crash, and replay what they did. What works is kept and reused.
 - The demo records a proposed local publication and waits. Read the action on its report page, then approve or deny it with one command. Denying it leaves that publication undone.
 - The demo saves its steps to disk with content fingerprints. Its report page lets you inspect the recorded inputs, proposed action and decisions together.
 - The built-in demo crashes a program twice on purpose. Finished steps are picked up, not redone. When ALGAL cannot tell whether a write went out, it stops and refuses to send it again.
@@ -208,13 +208,13 @@ Topics: Developer Tools, Artificial Intelligence, Open Source
 
 ## Beats
 
-1. ALGAL runs agent programs that stop and wait for you
+1. ALGAL is a language and VM for software that accumulates competence
 2. Review the proposed action before it runs
 3. Every step is saved as it happens
 4. Resume finished work after a crash
 5. Check a whole run on another machine
 6. For agents that touch real things
-7. The bet: software that gets better at its job
+7. Software that gets better at its job
 8. Keep host permissions explicit
 9. Try it in one command
 

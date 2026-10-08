@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "ALGAL is a programming language and VM for AI agent programs that wait for approval and leave receipts you can replay."
+description = "ALGAL is a programming language and VM where agent work becomes typed, tested, reusable procedures that wait for approval, survive crashes, and leave receipts you can replay."
 
 [lints]
 workspace = true
