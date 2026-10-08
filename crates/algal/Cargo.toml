@@ -15,7 +15,7 @@ hraness-cli-update = { git = "https://github.com/hraness/cli-update", tag = "v0.
 algal-expr = { path = "../algal-expr" }
 apple-foundation = { git = "https://github.com/hraness/apple-foundation", tag = "v0.2.0" }
 clap = { version = "=4.5.48", features = ["derive"] }
-getrandom = "=0.3.4"
+getrandom = "=0.4.3"
 hraness-cli-kit = { git = "https://github.com/hraness/desktop-foundation", tag = "v1.1.2", features = ["clap"] }
 libc = "=0.2.189"
 rusqlite = { version = "=0.40.2", default-features = false, features = ["bundled"] }
