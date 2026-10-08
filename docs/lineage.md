@@ -218,6 +218,38 @@ express them through its existing manifests, applications, effects, and
 foundry evidence. Temper's CSDL/OData interface, Cedar stack, actor backend,
 and proof-tool selection are not required parts of that adoption.
 
+## Goose: bounds the compiler proves
+
+[Goose](https://github.com/aardappel/goose/tree/35368105e3d50341b79a4cb873cc0261e82dfa42)
+is a memory-safe systems language with no heap, garbage collector, or lifetime
+annotations. The source reviewed on 2026-10-08 informs two proposed ALGAL
+directions; it is not a dependency, and its benchmark results are the
+project's own measurements, not evidence about ALGAL.
+
+Goose assigns every dynamic value to one of a fixed set of data stacks at
+compile time and proves that growth never moves a live value, so the runtime
+tracks only bump pointers. ALGAL expressions already admit no unbounded loop
+and run under a fuel ceiling and byte bounds that are checked as the program
+runs. The comparable step is to derive an upper bound on fuel and intermediate
+bytes before admission and put it on the program's interface, so a caller,
+the foundry, or a budget check can reject a program that cannot fit before it
+starts. The runtime checks stay as the safety boundary.
+
+Goose structures link with 1-, 2- or 4-byte relative offsets, so a structure
+is its own file format: loading is a read plus a verification pass that rejects
+hostile bytes. ALGAL's identity remains canonical JSON. The reference is useful
+for a derived, verified-on-load form of large stored values on replay and
+history paths, adopted only if it measurably beats parsing canonical JSON there.
+
+Goose also infers what each reference is rooted in rather than asking the
+author to annotate it. That bears on the question in the
+[vision](vision.md#the-representation-is-designed-to-be-generated-and-transformed):
+a check the compiler infers is one a model cannot get wrong while generating.
+It is a design data point, not a measured ALGAL result.
+
+The [north star](north-star.md#inspiration-from-current-programming-language-research)
+records both proposals as candidates under the vision's selection rules.
+
 ## Research precedents
 
 The claim that nobody has thought of evolving AI programs would not survive
