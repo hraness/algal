@@ -1,0 +1,2658 @@
+{
+  "contract": "algal.language-benchmark.v1",
+  "kind": "result",
+  "corpusDigest": "sha256:955bfd3eae801f566d464d0225487afad85c5665b1c2f953bf8b70b9cb4035cf",
+  "protocol": {
+    "warmupSamples": 3,
+    "measuredSamples": 15,
+    "phases": [
+      "cold",
+      "warm"
+    ],
+    "order": "path",
+    "quantile": "nearest-rank",
+    "outliers": "none"
+  },
+  "toolchain": {
+    "compiler": "algal-event-loop-contract@proposal",
+    "runtime": "bun@1.3.14",
+    "native": "rust@proposal"
+  },
+  "environment": {
+    "os": "fixture",
+    "arch": "fixture",
+    "cpu": "synthetic-contract-fixture"
+  },
+  "cases": [
+    {
+      "id": "counter-actor",
+      "kind": "actor",
+      "sourceDigest": "sha256:c5aae485dcf8608cb94b771b94d1bf2986827977b2781efa27afd798a9f5e5c6",
+      "expected": "accepted",
+      "observed": {
+        "artifactDigest": "sha256:8c5076158ed2e8a36fe7f86d25f37cce49ac78d50e8fa32abfe40ce111b5f010",
+        "interfaceDigest": "sha256:caff4dce99e5795cd5e5cb2acf043496c1858dbef26ecaf77ff276b75e03f357",
+        "eventDigest": "sha256:1869ff89ddc5785172505954b7b19278ee716b96c2e86c538b2cd6756e9dbce9"
+      },
+      "samples": [
+        {
+          "phase": "cold",
+          "index": 0,
+          "durationNs": 1000,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "cold",
+          "index": 1,
+          "durationNs": 1001,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "cold",
+          "index": 2,
+          "durationNs": 1002,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "cold",
+          "index": 3,
+          "durationNs": 1003,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "cold",
+          "index": 4,
+          "durationNs": 1004,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "cold",
+          "index": 5,
+          "durationNs": 1005,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "cold",
+          "index": 6,
+          "durationNs": 1006,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "cold",
+          "index": 7,
+          "durationNs": 1007,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "cold",
+          "index": 8,
+          "durationNs": 1008,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "cold",
+          "index": 9,
+          "durationNs": 1009,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "cold",
+          "index": 10,
+          "durationNs": 1010,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "cold",
+          "index": 11,
+          "durationNs": 1011,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "cold",
+          "index": 12,
+          "durationNs": 1012,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "cold",
+          "index": 13,
+          "durationNs": 1013,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "cold",
+          "index": 14,
+          "durationNs": 1014,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "warm",
+          "index": 0,
+          "durationNs": 400,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "warm",
+          "index": 1,
+          "durationNs": 401,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "warm",
+          "index": 2,
+          "durationNs": 402,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "warm",
+          "index": 3,
+          "durationNs": 403,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "warm",
+          "index": 4,
+          "durationNs": 404,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "warm",
+          "index": 5,
+          "durationNs": 405,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "warm",
+          "index": 6,
+          "durationNs": 406,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "warm",
+          "index": 7,
+          "durationNs": 407,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "warm",
+          "index": 8,
+          "durationNs": 408,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "warm",
+          "index": 9,
+          "durationNs": 409,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "warm",
+          "index": 10,
+          "durationNs": 410,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "warm",
+          "index": 11,
+          "durationNs": 411,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "warm",
+          "index": 12,
+          "durationNs": 412,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "warm",
+          "index": 13,
+          "durationNs": 413,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "warm",
+          "index": 14,
+          "durationNs": 414,
+          "outcome": "accepted"
+        }
+      ],
+      "summary": {
+        "cold": {
+          "count": 15,
+          "p50Ns": 1007,
+          "p95Ns": 1014
+        },
+        "warm": {
+          "count": 15,
+          "p50Ns": 407,
+          "p95Ns": 414
+        }
+      }
+    },
+    {
+      "id": "defer-with-writes",
+      "kind": "invalid",
+      "sourceDigest": "sha256:c127171d7bc7101b878db5c84cdd166a539206bafa7be0891312ae936a9bec1d",
+      "expected": "rejected",
+      "code": "EVENT_LOOP_SEMANTIC",
+      "span": {
+        "start": 2487,
+        "end": 2492
+      },
+      "samples": [
+        {
+          "phase": "cold",
+          "index": 0,
+          "durationNs": 1100,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 1,
+          "durationNs": 1101,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 2,
+          "durationNs": 1102,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 3,
+          "durationNs": 1103,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 4,
+          "durationNs": 1104,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 5,
+          "durationNs": 1105,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 6,
+          "durationNs": 1106,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 7,
+          "durationNs": 1107,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 8,
+          "durationNs": 1108,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 9,
+          "durationNs": 1109,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 10,
+          "durationNs": 1110,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 11,
+          "durationNs": 1111,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 12,
+          "durationNs": 1112,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 13,
+          "durationNs": 1113,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 14,
+          "durationNs": 1114,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 0,
+          "durationNs": 500,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 1,
+          "durationNs": 501,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 2,
+          "durationNs": 502,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 3,
+          "durationNs": 503,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 4,
+          "durationNs": 504,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 5,
+          "durationNs": 505,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 6,
+          "durationNs": 506,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 7,
+          "durationNs": 507,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 8,
+          "durationNs": 508,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 9,
+          "durationNs": 509,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 10,
+          "durationNs": 510,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 11,
+          "durationNs": 511,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 12,
+          "durationNs": 512,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 13,
+          "durationNs": 513,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 14,
+          "durationNs": 514,
+          "outcome": "rejected"
+        }
+      ],
+      "summary": {
+        "cold": {
+          "count": 15,
+          "p50Ns": 1107,
+          "p95Ns": 1114
+        },
+        "warm": {
+          "count": 15,
+          "p50Ns": 507,
+          "p95Ns": 514
+        }
+      }
+    },
+    {
+      "id": "duplicate-event",
+      "kind": "invalid",
+      "sourceDigest": "sha256:5c543062f5179a716777cc50387b65f6f8494851da6aa3772b765e1e564cc4cd",
+      "expected": "rejected",
+      "code": "EVENT_LOOP_ID",
+      "span": {
+        "start": 785,
+        "end": 794
+      },
+      "samples": [
+        {
+          "phase": "cold",
+          "index": 0,
+          "durationNs": 1200,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 1,
+          "durationNs": 1201,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 2,
+          "durationNs": 1202,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 3,
+          "durationNs": 1203,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 4,
+          "durationNs": 1204,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 5,
+          "durationNs": 1205,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 6,
+          "durationNs": 1206,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 7,
+          "durationNs": 1207,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 8,
+          "durationNs": 1208,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 9,
+          "durationNs": 1209,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 10,
+          "durationNs": 1210,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 11,
+          "durationNs": 1211,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 12,
+          "durationNs": 1212,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 13,
+          "durationNs": 1213,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 14,
+          "durationNs": 1214,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 0,
+          "durationNs": 600,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 1,
+          "durationNs": 601,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 2,
+          "durationNs": 602,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 3,
+          "durationNs": 603,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 4,
+          "durationNs": 604,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 5,
+          "durationNs": 605,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 6,
+          "durationNs": 606,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 7,
+          "durationNs": 607,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 8,
+          "durationNs": 608,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 9,
+          "durationNs": 609,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 10,
+          "durationNs": 610,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 11,
+          "durationNs": 611,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 12,
+          "durationNs": 612,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 13,
+          "durationNs": 613,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 14,
+          "durationNs": 614,
+          "outcome": "rejected"
+        }
+      ],
+      "summary": {
+        "cold": {
+          "count": 15,
+          "p50Ns": 1207,
+          "p95Ns": 1214
+        },
+        "warm": {
+          "count": 15,
+          "p50Ns": 607,
+          "p95Ns": 614
+        }
+      }
+    },
+    {
+      "id": "event-bytes-limit",
+      "kind": "invalid",
+      "sourceDigest": "sha256:f9f61e42244d5e122cc8374225bca7268398a8c055555470db0facded4a8536e",
+      "expected": "rejected",
+      "code": "EVENT_LOOP_BOUNDS",
+      "span": {
+        "start": 318,
+        "end": 323
+      },
+      "samples": [
+        {
+          "phase": "cold",
+          "index": 0,
+          "durationNs": 1300,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 1,
+          "durationNs": 1301,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 2,
+          "durationNs": 1302,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 3,
+          "durationNs": 1303,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 4,
+          "durationNs": 1304,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 5,
+          "durationNs": 1305,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 6,
+          "durationNs": 1306,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 7,
+          "durationNs": 1307,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 8,
+          "durationNs": 1308,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 9,
+          "durationNs": 1309,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 10,
+          "durationNs": 1310,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 11,
+          "durationNs": 1311,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 12,
+          "durationNs": 1312,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 13,
+          "durationNs": 1313,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 14,
+          "durationNs": 1314,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 0,
+          "durationNs": 700,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 1,
+          "durationNs": 701,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 2,
+          "durationNs": 702,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 3,
+          "durationNs": 703,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 4,
+          "durationNs": 704,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 5,
+          "durationNs": 705,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 6,
+          "durationNs": 706,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 7,
+          "durationNs": 707,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 8,
+          "durationNs": 708,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 9,
+          "durationNs": 709,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 10,
+          "durationNs": 710,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 11,
+          "durationNs": 711,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 12,
+          "durationNs": 712,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 13,
+          "durationNs": 713,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 14,
+          "durationNs": 714,
+          "outcome": "rejected"
+        }
+      ],
+      "summary": {
+        "cold": {
+          "count": 15,
+          "p50Ns": 1307,
+          "p95Ns": 1314
+        },
+        "warm": {
+          "count": 15,
+          "p50Ns": 707,
+          "p95Ns": 714
+        }
+      }
+    },
+    {
+      "id": "malformed-digest",
+      "kind": "invalid",
+      "sourceDigest": "sha256:c4ff5f7f90a78132a129819084acb10c321cbac034b8bedeae475d298da60704",
+      "expected": "rejected",
+      "code": "EVENT_LOOP_DIGEST",
+      "span": {
+        "start": 116,
+        "end": 126
+      },
+      "samples": [
+        {
+          "phase": "cold",
+          "index": 0,
+          "durationNs": 1400,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 1,
+          "durationNs": 1401,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 2,
+          "durationNs": 1402,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 3,
+          "durationNs": 1403,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 4,
+          "durationNs": 1404,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 5,
+          "durationNs": 1405,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 6,
+          "durationNs": 1406,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 7,
+          "durationNs": 1407,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 8,
+          "durationNs": 1408,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 9,
+          "durationNs": 1409,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 10,
+          "durationNs": 1410,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 11,
+          "durationNs": 1411,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 12,
+          "durationNs": 1412,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 13,
+          "durationNs": 1413,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 14,
+          "durationNs": 1414,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 0,
+          "durationNs": 800,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 1,
+          "durationNs": 801,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 2,
+          "durationNs": 802,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 3,
+          "durationNs": 803,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 4,
+          "durationNs": 804,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 5,
+          "durationNs": 805,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 6,
+          "durationNs": 806,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 7,
+          "durationNs": 807,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 8,
+          "durationNs": 808,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 9,
+          "durationNs": 809,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 10,
+          "durationNs": 810,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 11,
+          "durationNs": 811,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 12,
+          "durationNs": 812,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 13,
+          "durationNs": 813,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 14,
+          "durationNs": 814,
+          "outcome": "rejected"
+        }
+      ],
+      "summary": {
+        "cold": {
+          "count": 15,
+          "p50Ns": 1407,
+          "p95Ns": 1414
+        },
+        "warm": {
+          "count": 15,
+          "p50Ns": 807,
+          "p95Ns": 814
+        }
+      }
+    },
+    {
+      "id": "output-count-limit",
+      "kind": "invalid",
+      "sourceDigest": "sha256:1f39633efbc0648ac3e16b28667c33368e204afb8ce8aef500e366040e76eff7",
+      "expected": "rejected",
+      "code": "EVENT_LOOP_BOUNDS",
+      "span": {
+        "start": 375,
+        "end": 376
+      },
+      "samples": [
+        {
+          "phase": "cold",
+          "index": 0,
+          "durationNs": 1500,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 1,
+          "durationNs": 1501,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 2,
+          "durationNs": 1502,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 3,
+          "durationNs": 1503,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 4,
+          "durationNs": 1504,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 5,
+          "durationNs": 1505,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 6,
+          "durationNs": 1506,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 7,
+          "durationNs": 1507,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 8,
+          "durationNs": 1508,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 9,
+          "durationNs": 1509,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 10,
+          "durationNs": 1510,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 11,
+          "durationNs": 1511,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 12,
+          "durationNs": 1512,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 13,
+          "durationNs": 1513,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 14,
+          "durationNs": 1514,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 0,
+          "durationNs": 900,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 1,
+          "durationNs": 901,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 2,
+          "durationNs": 902,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 3,
+          "durationNs": 903,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 4,
+          "durationNs": 904,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 5,
+          "durationNs": 905,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 6,
+          "durationNs": 906,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 7,
+          "durationNs": 907,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 8,
+          "durationNs": 908,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 9,
+          "durationNs": 909,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 10,
+          "durationNs": 910,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 11,
+          "durationNs": 911,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 12,
+          "durationNs": 912,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 13,
+          "durationNs": 913,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 14,
+          "durationNs": 914,
+          "outcome": "rejected"
+        }
+      ],
+      "summary": {
+        "cold": {
+          "count": 15,
+          "p50Ns": 1507,
+          "p95Ns": 1514
+        },
+        "warm": {
+          "count": 15,
+          "p50Ns": 907,
+          "p95Ns": 914
+        }
+      }
+    },
+    {
+      "id": "unknown-behavior-key",
+      "kind": "invalid",
+      "sourceDigest": "sha256:e6b4f99e4d64bc84e8bff8f561002aa3fd704695cba08e04083fd13a435c3198",
+      "expected": "rejected",
+      "code": "EVENT_LOOP_UNKNOWN_KEY",
+      "span": {
+        "start": 284,
+        "end": 289
+      },
+      "samples": [
+        {
+          "phase": "cold",
+          "index": 0,
+          "durationNs": 1600,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 1,
+          "durationNs": 1601,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 2,
+          "durationNs": 1602,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 3,
+          "durationNs": 1603,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 4,
+          "durationNs": 1604,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 5,
+          "durationNs": 1605,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 6,
+          "durationNs": 1606,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 7,
+          "durationNs": 1607,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 8,
+          "durationNs": 1608,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 9,
+          "durationNs": 1609,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 10,
+          "durationNs": 1610,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 11,
+          "durationNs": 1611,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 12,
+          "durationNs": 1612,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 13,
+          "durationNs": 1613,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 14,
+          "durationNs": 1614,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 0,
+          "durationNs": 1000,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 1,
+          "durationNs": 1001,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 2,
+          "durationNs": 1002,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 3,
+          "durationNs": 1003,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 4,
+          "durationNs": 1004,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 5,
+          "durationNs": 1005,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 6,
+          "durationNs": 1006,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 7,
+          "durationNs": 1007,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 8,
+          "durationNs": 1008,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 9,
+          "durationNs": 1009,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 10,
+          "durationNs": 1010,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 11,
+          "durationNs": 1011,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 12,
+          "durationNs": 1012,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 13,
+          "durationNs": 1013,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 14,
+          "durationNs": 1014,
+          "outcome": "rejected"
+        }
+      ],
+      "summary": {
+        "cold": {
+          "count": 15,
+          "p50Ns": 1607,
+          "p95Ns": 1614
+        },
+        "warm": {
+          "count": 15,
+          "p50Ns": 1007,
+          "p95Ns": 1014
+        }
+      }
+    },
+    {
+      "id": "unknown-event-reference",
+      "kind": "invalid",
+      "sourceDigest": "sha256:099e1e35b4cc00b77ff2dad849f32d1f337874676d26bb6fcb92ce4a54b7ae0f",
+      "expected": "rejected",
+      "code": "EVENT_LOOP_REFERENCE",
+      "span": {
+        "start": 1288,
+        "end": 1301
+      },
+      "samples": [
+        {
+          "phase": "cold",
+          "index": 0,
+          "durationNs": 1700,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 1,
+          "durationNs": 1701,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 2,
+          "durationNs": 1702,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 3,
+          "durationNs": 1703,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 4,
+          "durationNs": 1704,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 5,
+          "durationNs": 1705,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 6,
+          "durationNs": 1706,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 7,
+          "durationNs": 1707,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 8,
+          "durationNs": 1708,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 9,
+          "durationNs": 1709,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 10,
+          "durationNs": 1710,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 11,
+          "durationNs": 1711,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 12,
+          "durationNs": 1712,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 13,
+          "durationNs": 1713,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 14,
+          "durationNs": 1714,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 0,
+          "durationNs": 1100,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 1,
+          "durationNs": 1101,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 2,
+          "durationNs": 1102,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 3,
+          "durationNs": 1103,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 4,
+          "durationNs": 1104,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 5,
+          "durationNs": 1105,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 6,
+          "durationNs": 1106,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 7,
+          "durationNs": 1107,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 8,
+          "durationNs": 1108,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 9,
+          "durationNs": 1109,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 10,
+          "durationNs": 1110,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 11,
+          "durationNs": 1111,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 12,
+          "durationNs": 1112,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 13,
+          "durationNs": 1113,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 14,
+          "durationNs": 1114,
+          "outcome": "rejected"
+        }
+      ],
+      "summary": {
+        "cold": {
+          "count": 15,
+          "p50Ns": 1707,
+          "p95Ns": 1714
+        },
+        "warm": {
+          "count": 15,
+          "p50Ns": 1107,
+          "p95Ns": 1114
+        }
+      }
+    },
+    {
+      "id": "unknown-expression-key",
+      "kind": "invalid",
+      "sourceDigest": "sha256:34ded797f7d5ba17b0a5182a59c71129c8f3a1889d5037c6f31b073db50497b3",
+      "expected": "rejected",
+      "code": "EVENT_LOOP_UNKNOWN_KEY",
+      "span": {
+        "start": 1557,
+        "end": 1562
+      },
+      "samples": [
+        {
+          "phase": "cold",
+          "index": 0,
+          "durationNs": 1800,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 1,
+          "durationNs": 1801,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 2,
+          "durationNs": 1802,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 3,
+          "durationNs": 1803,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 4,
+          "durationNs": 1804,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 5,
+          "durationNs": 1805,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 6,
+          "durationNs": 1806,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 7,
+          "durationNs": 1807,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 8,
+          "durationNs": 1808,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 9,
+          "durationNs": 1809,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 10,
+          "durationNs": 1810,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 11,
+          "durationNs": 1811,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 12,
+          "durationNs": 1812,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 13,
+          "durationNs": 1813,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 14,
+          "durationNs": 1814,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 0,
+          "durationNs": 1200,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 1,
+          "durationNs": 1201,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 2,
+          "durationNs": 1202,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 3,
+          "durationNs": 1203,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 4,
+          "durationNs": 1204,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 5,
+          "durationNs": 1205,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 6,
+          "durationNs": 1206,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 7,
+          "durationNs": 1207,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 8,
+          "durationNs": 1208,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 9,
+          "durationNs": 1209,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 10,
+          "durationNs": 1210,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 11,
+          "durationNs": 1211,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 12,
+          "durationNs": 1212,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 13,
+          "durationNs": 1213,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 14,
+          "durationNs": 1214,
+          "outcome": "rejected"
+        }
+      ],
+      "summary": {
+        "cold": {
+          "count": 15,
+          "p50Ns": 1807,
+          "p95Ns": 1814
+        },
+        "warm": {
+          "count": 15,
+          "p50Ns": 1207,
+          "p95Ns": 1214
+        }
+      }
+    },
+    {
+      "id": "unknown-root",
+      "kind": "invalid",
+      "sourceDigest": "sha256:1421205da5f1487a6c6ddd30c21910d102c9c8570c7d9cdda051582e14b227d0",
+      "expected": "rejected",
+      "code": "EVENT_LOOP_UNKNOWN_KEY",
+      "span": {
+        "start": 3053,
+        "end": 3063
+      },
+      "samples": [
+        {
+          "phase": "cold",
+          "index": 0,
+          "durationNs": 1900,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 1,
+          "durationNs": 1901,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 2,
+          "durationNs": 1902,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 3,
+          "durationNs": 1903,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 4,
+          "durationNs": 1904,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 5,
+          "durationNs": 1905,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 6,
+          "durationNs": 1906,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 7,
+          "durationNs": 1907,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 8,
+          "durationNs": 1908,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 9,
+          "durationNs": 1909,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 10,
+          "durationNs": 1910,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 11,
+          "durationNs": 1911,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 12,
+          "durationNs": 1912,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 13,
+          "durationNs": 1913,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 14,
+          "durationNs": 1914,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 0,
+          "durationNs": 1300,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 1,
+          "durationNs": 1301,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 2,
+          "durationNs": 1302,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 3,
+          "durationNs": 1303,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 4,
+          "durationNs": 1304,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 5,
+          "durationNs": 1305,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 6,
+          "durationNs": 1306,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 7,
+          "durationNs": 1307,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 8,
+          "durationNs": 1308,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 9,
+          "durationNs": 1309,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 10,
+          "durationNs": 1310,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 11,
+          "durationNs": 1311,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 12,
+          "durationNs": 1312,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 13,
+          "durationNs": 1313,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 14,
+          "durationNs": 1314,
+          "outcome": "rejected"
+        }
+      ],
+      "summary": {
+        "cold": {
+          "count": 15,
+          "p50Ns": 1907,
+          "p95Ns": 1914
+        },
+        "warm": {
+          "count": 15,
+          "p50Ns": 1307,
+          "p95Ns": 1314
+        }
+      }
+    },
+    {
+      "id": "wrong-contract",
+      "kind": "invalid",
+      "sourceDigest": "sha256:bde6c2b5a3af5402a5b6b17b8f4c607b38c5107d409a8c62689d52edcea7ab9c",
+      "expected": "rejected",
+      "code": "EVENT_LOOP_CONTRACT",
+      "span": {
+        "start": 17,
+        "end": 36
+      },
+      "samples": [
+        {
+          "phase": "cold",
+          "index": 0,
+          "durationNs": 2000,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 1,
+          "durationNs": 2001,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 2,
+          "durationNs": 2002,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 3,
+          "durationNs": 2003,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 4,
+          "durationNs": 2004,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 5,
+          "durationNs": 2005,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 6,
+          "durationNs": 2006,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 7,
+          "durationNs": 2007,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 8,
+          "durationNs": 2008,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 9,
+          "durationNs": 2009,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 10,
+          "durationNs": 2010,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 11,
+          "durationNs": 2011,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 12,
+          "durationNs": 2012,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 13,
+          "durationNs": 2013,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "cold",
+          "index": 14,
+          "durationNs": 2014,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 0,
+          "durationNs": 1400,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 1,
+          "durationNs": 1401,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 2,
+          "durationNs": 1402,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 3,
+          "durationNs": 1403,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 4,
+          "durationNs": 1404,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 5,
+          "durationNs": 1405,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 6,
+          "durationNs": 1406,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 7,
+          "durationNs": 1407,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 8,
+          "durationNs": 1408,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 9,
+          "durationNs": 1409,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 10,
+          "durationNs": 1410,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 11,
+          "durationNs": 1411,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 12,
+          "durationNs": 1412,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 13,
+          "durationNs": 1413,
+          "outcome": "rejected"
+        },
+        {
+          "phase": "warm",
+          "index": 14,
+          "durationNs": 1414,
+          "outcome": "rejected"
+        }
+      ],
+      "summary": {
+        "cold": {
+          "count": 15,
+          "p50Ns": 2007,
+          "p95Ns": 2014
+        },
+        "warm": {
+          "count": 15,
+          "p50Ns": 1407,
+          "p95Ns": 1414
+        }
+      }
+    },
+    {
+      "id": "counter-project",
+      "kind": "project",
+      "sourceDigest": "sha256:8cd75e3d252ce54b82e4f706cd2fe9c976053f0c1676b1f156788b033fd20818",
+      "expected": "accepted",
+      "observed": {
+        "projectDigest": "sha256:fbf02f7559fe86742d9e8e36b1cb01f80686dad35022c46613dd6dcd368b41dc",
+        "closureDigest": "sha256:7f79a6f4e1bd22c9006b8c0c691d9e2b670eb2a6417dfc3f22940ad9834791a9"
+      },
+      "samples": [
+        {
+          "phase": "cold",
+          "index": 0,
+          "durationNs": 2100,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "cold",
+          "index": 1,
+          "durationNs": 2101,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "cold",
+          "index": 2,
+          "durationNs": 2102,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "cold",
+          "index": 3,
+          "durationNs": 2103,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "cold",
+          "index": 4,
+          "durationNs": 2104,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "cold",
+          "index": 5,
+          "durationNs": 2105,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "cold",
+          "index": 6,
+          "durationNs": 2106,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "cold",
+          "index": 7,
+          "durationNs": 2107,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "cold",
+          "index": 8,
+          "durationNs": 2108,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "cold",
+          "index": 9,
+          "durationNs": 2109,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "cold",
+          "index": 10,
+          "durationNs": 2110,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "cold",
+          "index": 11,
+          "durationNs": 2111,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "cold",
+          "index": 12,
+          "durationNs": 2112,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "cold",
+          "index": 13,
+          "durationNs": 2113,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "cold",
+          "index": 14,
+          "durationNs": 2114,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "warm",
+          "index": 0,
+          "durationNs": 1500,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "warm",
+          "index": 1,
+          "durationNs": 1501,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "warm",
+          "index": 2,
+          "durationNs": 1502,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "warm",
+          "index": 3,
+          "durationNs": 1503,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "warm",
+          "index": 4,
+          "durationNs": 1504,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "warm",
+          "index": 5,
+          "durationNs": 1505,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "warm",
+          "index": 6,
+          "durationNs": 1506,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "warm",
+          "index": 7,
+          "durationNs": 1507,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "warm",
+          "index": 8,
+          "durationNs": 1508,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "warm",
+          "index": 9,
+          "durationNs": 1509,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "warm",
+          "index": 10,
+          "durationNs": 1510,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "warm",
+          "index": 11,
+          "durationNs": 1511,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "warm",
+          "index": 12,
+          "durationNs": 1512,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "warm",
+          "index": 13,
+          "durationNs": 1513,
+          "outcome": "accepted"
+        },
+        {
+          "phase": "warm",
+          "index": 14,
+          "durationNs": 1514,
+          "outcome": "accepted"
+        }
+      ],
+      "summary": {
+        "cold": {
+          "count": 15,
+          "p50Ns": 2107,
+          "p95Ns": 2114
+        },
+        "warm": {
+          "count": 15,
+          "p50Ns": 1507,
+          "p95Ns": 1514
+        }
+      }
+    }
+  ],
+  "aggregate": [
+    {
+      "id": "counter-actor",
+      "phase": "cold",
+      "count": 15,
+      "p50Ns": 1007,
+      "p95Ns": 1014
+    },
+    {
+      "id": "counter-actor",
+      "phase": "warm",
+      "count": 15,
+      "p50Ns": 407,
+      "p95Ns": 414
+    },
+    {
+      "id": "defer-with-writes",
+      "phase": "cold",
+      "count": 15,
+      "p50Ns": 1107,
+      "p95Ns": 1114
+    },
+    {
+      "id": "defer-with-writes",
+      "phase": "warm",
+      "count": 15,
+      "p50Ns": 507,
+      "p95Ns": 514
+    },
+    {
+      "id": "duplicate-event",
+      "phase": "cold",
+      "count": 15,
+      "p50Ns": 1207,
+      "p95Ns": 1214
+    },
+    {
+      "id": "duplicate-event",
+      "phase": "warm",
+      "count": 15,
+      "p50Ns": 607,
+      "p95Ns": 614
+    },
+    {
+      "id": "event-bytes-limit",
+      "phase": "cold",
+      "count": 15,
+      "p50Ns": 1307,
+      "p95Ns": 1314
+    },
+    {
+      "id": "event-bytes-limit",
+      "phase": "warm",
+      "count": 15,
+      "p50Ns": 707,
+      "p95Ns": 714
+    },
+    {
+      "id": "malformed-digest",
+      "phase": "cold",
+      "count": 15,
+      "p50Ns": 1407,
+      "p95Ns": 1414
+    },
+    {
+      "id": "malformed-digest",
+      "phase": "warm",
+      "count": 15,
+      "p50Ns": 807,
+      "p95Ns": 814
+    },
+    {
+      "id": "output-count-limit",
+      "phase": "cold",
+      "count": 15,
+      "p50Ns": 1507,
+      "p95Ns": 1514
+    },
+    {
+      "id": "output-count-limit",
+      "phase": "warm",
+      "count": 15,
+      "p50Ns": 907,
+      "p95Ns": 914
+    },
+    {
+      "id": "unknown-behavior-key",
+      "phase": "cold",
+      "count": 15,
+      "p50Ns": 1607,
+      "p95Ns": 1614
+    },
+    {
+      "id": "unknown-behavior-key",
+      "phase": "warm",
+      "count": 15,
+      "p50Ns": 1007,
+      "p95Ns": 1014
+    },
+    {
+      "id": "unknown-event-reference",
+      "phase": "cold",
+      "count": 15,
+      "p50Ns": 1707,
+      "p95Ns": 1714
+    },
+    {
+      "id": "unknown-event-reference",
+      "phase": "warm",
+      "count": 15,
+      "p50Ns": 1107,
+      "p95Ns": 1114
+    },
+    {
+      "id": "unknown-expression-key",
+      "phase": "cold",
+      "count": 15,
+      "p50Ns": 1807,
+      "p95Ns": 1814
+    },
+    {
+      "id": "unknown-expression-key",
+      "phase": "warm",
+      "count": 15,
+      "p50Ns": 1207,
+      "p95Ns": 1214
+    },
+    {
+      "id": "unknown-root",
+      "phase": "cold",
+      "count": 15,
+      "p50Ns": 1907,
+      "p95Ns": 1914
+    },
+    {
+      "id": "unknown-root",
+      "phase": "warm",
+      "count": 15,
+      "p50Ns": 1307,
+      "p95Ns": 1314
+    },
+    {
+      "id": "wrong-contract",
+      "phase": "cold",
+      "count": 15,
+      "p50Ns": 2007,
+      "p95Ns": 2014
+    },
+    {
+      "id": "wrong-contract",
+      "phase": "warm",
+      "count": 15,
+      "p50Ns": 1407,
+      "p95Ns": 1414
+    },
+    {
+      "id": "counter-project",
+      "phase": "cold",
+      "count": 15,
+      "p50Ns": 2107,
+      "p95Ns": 2114
+    },
+    {
+      "id": "counter-project",
+      "phase": "warm",
+      "count": 15,
+      "p50Ns": 1507,
+      "p95Ns": 1514
+    }
+  ],
+  "digest": "sha256:eaa3e9d80962b8efbf9bcb9cb67aebe377241597f1661eb8fd7449f6be7a7b5d"
+}

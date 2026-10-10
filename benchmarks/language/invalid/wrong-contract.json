@@ -1,0 +1,143 @@
+{
+  "contract": "algal.event-loop.v0",
+  "behavior": {
+    "id": "counter",
+    "revision": 1,
+    "sourceDigest": "sha256:59b2a1b5309fd3b7702cb0e646d5be007d6bfdf1423c60f57583886b38e37528",
+    "digest": "sha256:553554d743b55b141b46346cc7f560545dccb8d9c98fde15fea8c0f8692a7ce4"
+  },
+  "limits": {
+    "maxEventBytes": 1024,
+    "maxStateBytes": 16384,
+    "maxOutputEvents": 8,
+    "maxTransitionFuel": 1000,
+    "maxMailboxDepth": 64
+  },
+  "events": [
+    {
+      "id": "increment",
+      "payload": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "amount",
+            "type": "number"
+          }
+        ]
+      }
+    },
+    {
+      "id": "reset",
+      "payload": {
+        "kind": "record",
+        "fields": []
+      }
+    },
+    {
+      "id": "incremented",
+      "payload": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "amount",
+            "type": "number"
+          }
+        ]
+      }
+    }
+  ],
+  "actors": [
+    {
+      "id": "counter",
+      "state": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "count",
+            "type": "number",
+            "initial": 0
+          }
+        ]
+      },
+      "transitions": [
+        {
+          "id": "increment",
+          "on": "increment",
+          "when": {
+            "contract": "algal.expr.v1",
+            "program": [
+              "gte",
+              [
+                "get",
+                "event",
+                "amount"
+              ],
+              1
+            ]
+          },
+          "writes": [
+            {
+              "path": [
+                "count"
+              ],
+              "value": {
+                "contract": "algal.expr.v1",
+                "program": [
+                  "add",
+                  [
+                    "get",
+                    "state",
+                    "count"
+                  ],
+                  [
+                    "get",
+                    "event",
+                    "amount"
+                  ]
+                ]
+              }
+            }
+          ],
+          "outputs": [
+            {
+              "kind": "notify",
+              "target": "self",
+              "event": "incremented",
+              "payload": {
+                "contract": "algal.expr.v1",
+                "program": [
+                  "get",
+                  "event"
+                ]
+              }
+            }
+          ],
+          "result": {
+            "kind": "continue"
+          }
+        },
+        {
+          "id": "reset",
+          "on": "reset",
+          "when": null,
+          "writes": [
+            {
+              "path": [
+                "count"
+              ],
+              "value": {
+                "contract": "algal.expr.v1",
+                "program": 0
+              }
+            }
+          ],
+          "outputs": [],
+          "result": {
+            "kind": "quiet"
+          }
+        }
+      ]
+    }
+  ],
+  "digest": "sha256:8c5076158ed2e8a36fe7f86d25f37cce49ac78d50e8fa32abfe40ce111b5f010"
+}

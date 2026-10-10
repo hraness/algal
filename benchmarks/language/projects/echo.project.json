@@ -1,0 +1,16 @@
+{
+  "contract": "algal.language-project.v1",
+  "id": "counter-project",
+  "entry": "actors/echo.json",
+  "files": [
+    {
+      "path": "actors/echo.json",
+      "digest": "sha256:c5aae485dcf8608cb94b771b94d1bf2986827977b2781efa27afd798a9f5e5c6"
+    },
+    {
+      "path": "actors/echo.events.json",
+      "digest": "sha256:15a12f10f3b23b888dc2a7401ee58aa197a6973f3561112280a6442f44c47cfa"
+    }
+  ],
+  "digest": "sha256:fbf02f7559fe86742d9e8e36b1cb01f80686dad35022c46613dd6dcd368b41dc"
+}
