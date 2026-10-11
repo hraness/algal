@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { checkProgram, EXPR_BOUNDS } from "../../src/expr";
 import { canonicalize, isJsonValue, type JsonValue } from "../../src/values";
 import { locateJsonSpan, type ByteSpan } from "./span";
+import { ProjectClosureError, verifyProjectClosure } from "./project-closure";
 
 const ROOT = import.meta.dir;
 const DIGEST = /^sha256:[0-9a-f]{64}$/;
@@ -46,9 +47,9 @@ function fail(code: ErrorCode, message: string, at?: readonly (string | number)[
   throw new FixtureError(code, message, at);
 }
 
-function object(value: unknown, what: string): RecordValue {
+function object(value: unknown, what: string, at?: readonly (string | number)[]): RecordValue {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    fail("EVENT_LOOP_PARSE", `${what} must be an object`);
+    fail("EVENT_LOOP_PARSE", `${what} must be an object`, at);
   }
   return value as RecordValue;
 }
@@ -59,20 +60,20 @@ function exact(value: RecordValue, keys: readonly string[], what: string, at?: r
     if (!allowed.has(key)) fail("EVENT_LOOP_UNKNOWN_KEY", `${what}.${key}`, at && [...at, key]);
   }
   for (const key of keys) {
-    if (!Object.hasOwn(value, key)) fail("EVENT_LOOP_PARSE", `${what}.${key} is missing`);
+    if (!Object.hasOwn(value, key)) fail("EVENT_LOOP_PARSE", `${what}.${key} is missing`, at);
   }
 }
 
-function text(value: unknown, what: string, maxBytes = 128): string {
+function text(value: unknown, what: string, maxBytes = 128, at?: readonly (string | number)[]): string {
   if (typeof value !== "string" || value.length === 0 || new TextEncoder().encode(value).byteLength > maxBytes) {
-    fail("EVENT_LOOP_PARSE", `${what} must be a non-empty bounded string`);
+    fail("EVENT_LOOP_PARSE", `${what} must be a non-empty bounded string`, at);
   }
   return value;
 }
 
-function identifier(value: unknown, what: string): string {
-  const id = text(value, what, 64);
-  if (!ID.test(id)) fail("EVENT_LOOP_ID", `${what} is not lower kebab case`);
+function identifier(value: unknown, what: string, at?: readonly (string | number)[]): string {
+  const id = text(value, what, 64, at);
+  if (!ID.test(id)) fail("EVENT_LOOP_ID", `${what} is not lower kebab case`, at);
   return id;
 }
 
@@ -90,102 +91,102 @@ function digest(value: unknown, what: string, at?: readonly (string | number)[])
 
 // Apply the expression value limits to caller-owned JSON too, before
 // canonicalization or a recursive unbounded isJsonValue walk.
-function json(value: unknown, what: string): JsonValue {
+function json(value: unknown, what: string, at?: readonly (string | number)[]): JsonValue {
   const encoder = new TextEncoder();
   const ancestors = new Set<object>();
   const maxBytes = EXPR_BOUNDS.maxValueBytes;
-  function size(node: unknown, depth: number): number {
+  function size(node: unknown, depth: number, location?: readonly (string | number)[]): number {
     if (depth > EXPR_BOUNDS.maxValueDepth ||
         (node !== null && typeof node === "object" && depth === EXPR_BOUNDS.maxValueDepth)) {
-      fail("EVENT_LOOP_BOUNDS", `${what} exceeds JSON value depth`);
+      fail("EVENT_LOOP_BOUNDS", `${what} exceeds JSON value depth`, location);
     }
     if (typeof node === "string" && encoder.encode(node).byteLength > EXPR_BOUNDS.maxStringBytes) {
-      fail("EVENT_LOOP_BOUNDS", `${what} exceeds JSON string bytes`);
+      fail("EVENT_LOOP_BOUNDS", `${what} exceeds JSON string bytes`, location);
     }
     if (Array.isArray(node)) {
-      if (node.length > EXPR_BOUNDS.maxListLen) fail("EVENT_LOOP_BOUNDS", `${what} exceeds JSON list length`);
-      if (ancestors.has(node)) fail("EVENT_LOOP_PARSE", `${what} is cyclic`);
+      if (node.length > EXPR_BOUNDS.maxListLen) fail("EVENT_LOOP_BOUNDS", `${what} exceeds JSON list length`, location);
+      if (ancestors.has(node)) fail("EVENT_LOOP_PARSE", `${what} is cyclic`, location);
       ancestors.add(node);
       let bytes = 2;
       for (let i = 0; i < node.length; i++) {
-        if (!Object.hasOwn(node, i)) fail("EVENT_LOOP_PARSE", `${what} has a sparse list`);
-        bytes += Number(i > 0) + size(node[i], depth + 1);
-        if (bytes > maxBytes) fail("EVENT_LOOP_BOUNDS", `${what} exceeds JSON value bytes`);
+        if (!Object.hasOwn(node, i)) fail("EVENT_LOOP_PARSE", `${what} has a sparse list`, location);
+        bytes += Number(i > 0) + size(node[i], depth + 1, location && [...location, i]);
+        if (bytes > maxBytes) fail("EVENT_LOOP_BOUNDS", `${what} exceeds JSON value bytes`, location);
       }
       ancestors.delete(node);
       return bytes;
     }
     if (node !== null && typeof node === "object") {
       const proto = Object.getPrototypeOf(node);
-      if (proto !== Object.prototype && proto !== null) fail("EVENT_LOOP_PARSE", `${what} is not a JSON object`);
-      if (ancestors.has(node)) fail("EVENT_LOOP_PARSE", `${what} is cyclic`);
+      if (proto !== Object.prototype && proto !== null) fail("EVENT_LOOP_PARSE", `${what} is not a JSON object`, location);
+      if (ancestors.has(node)) fail("EVENT_LOOP_PARSE", `${what} is cyclic`, location);
       const keys = Object.keys(node);
-      if (keys.length > EXPR_BOUNDS.maxObjectKeys) fail("EVENT_LOOP_BOUNDS", `${what} exceeds JSON object keys`);
+      if (keys.length > EXPR_BOUNDS.maxObjectKeys) fail("EVENT_LOOP_BOUNDS", `${what} exceeds JSON object keys`, location);
       ancestors.add(node);
       let bytes = 2;
       for (const [index, key] of keys.entries()) {
         if (encoder.encode(key).byteLength > EXPR_BOUNDS.maxStringBytes) {
-          fail("EVENT_LOOP_BOUNDS", `${what} exceeds JSON key bytes`);
+          fail("EVENT_LOOP_BOUNDS", `${what} exceeds JSON key bytes`, location);
         }
         bytes += Number(index > 0) + encoder.encode(JSON.stringify(key)).byteLength + 1 +
-          size((node as Record<string, unknown>)[key], depth + 1);
-        if (bytes > maxBytes) fail("EVENT_LOOP_BOUNDS", `${what} exceeds JSON value bytes`);
+          size((node as Record<string, unknown>)[key], depth + 1, location && [...location, key]);
+        if (bytes > maxBytes) fail("EVENT_LOOP_BOUNDS", `${what} exceeds JSON value bytes`, location);
       }
       ancestors.delete(node);
       return bytes;
     }
     if (node !== null && typeof node !== "boolean" &&
         !(typeof node === "number" && Number.isFinite(node)) && typeof node !== "string") {
-      fail("EVENT_LOOP_PARSE", `${what} is not canonical JSON`);
+      fail("EVENT_LOOP_PARSE", `${what} is not canonical JSON`, location);
     }
     const scalar = JSON.stringify(node);
-    if (typeof scalar !== "string") fail("EVENT_LOOP_PARSE", `${what} is not canonical JSON`);
+    if (typeof scalar !== "string") fail("EVENT_LOOP_PARSE", `${what} is not canonical JSON`, location);
     return encoder.encode(scalar).byteLength;
   }
-  if (size(value, 0) > maxBytes) fail("EVENT_LOOP_BOUNDS", `${what} exceeds JSON value bytes`);
+  if (size(value, 0, at) > maxBytes) fail("EVENT_LOOP_BOUNDS", `${what} exceeds JSON value bytes`, at);
   return value as JsonValue;
 }
 
-function canonicalBytes(value: unknown, what: string): number {
-  return new TextEncoder().encode(canonicalize(json(value, what))).byteLength;
+function canonicalBytes(value: unknown, what: string, at?: readonly (string | number)[]): number {
+  return new TextEncoder().encode(canonicalize(json(value, what, at))).byteLength;
 }
 
-function jsonBytes(value: unknown, what: string): number {
-  const size = canonicalBytes(value, what);
-  if (size > EXPR_BOUNDS.maxProgramBytes) fail("EVENT_LOOP_BOUNDS", `${what} exceeds expression bytes`);
+function jsonBytes(value: unknown, what: string, at?: readonly (string | number)[]): number {
+  const size = canonicalBytes(value, what, at);
+  if (size > EXPR_BOUNDS.maxProgramBytes) fail("EVENT_LOOP_BOUNDS", `${what} exceeds expression bytes`, at);
   return size;
 }
 
 // Include quoted data in the depth check: the evaluator's static walk skips
 // quote payloads, but they still contribute to the program's JSON depth.
-function expressionShape(value: unknown, what: string): void {
+function expressionShape(value: unknown, what: string, at?: readonly (string | number)[]): void {
   let nodes = 0;
-  function visit(node: unknown, depth: number): void {
+  function visit(node: unknown, depth: number, location?: readonly (string | number)[]): void {
     nodes++;
     if (nodes > EXPR_BOUNDS.maxProgramNodes || depth > EXPR_BOUNDS.maxProgramDepth) {
-      fail("EVENT_LOOP_BOUNDS", `${what} exceeds expression nodes or depth`);
+      fail("EVENT_LOOP_BOUNDS", `${what} exceeds expression nodes or depth`, location);
     }
     if (Array.isArray(node)) {
-      for (const child of node) visit(child, depth + 1);
+      for (const [index, child] of node.entries()) visit(child, depth + 1, location && [...location, index]);
     } else if (node !== null && typeof node === "object") {
-      for (const child of Object.values(node)) visit(child, depth + 1);
+      for (const [key, child] of Object.entries(node)) visit(child, depth + 1, location && [...location, key]);
     }
   }
-  visit(value, 1);
+  visit(value, 1, at);
 }
 
 function expression(value: unknown, what: string, at?: readonly (string | number)[]): void {
-  const record = object(value, what);
+  const record = object(value, what, at);
   exact(record, ["contract", "program"], what, at);
-  if (record.contract !== "algal.expr.v1") fail("EVENT_LOOP_CONTRACT", `${what}.contract`);
-  expressionShape(record.program, `${what}.program`);
-  const program = json(record.program, `${what}.program`);
-  jsonBytes(program, `${what}.program`);
+  if (record.contract !== "algal.expr.v1") fail("EVENT_LOOP_CONTRACT", `${what}.contract`, at && [...at, "contract"]);
+  expressionShape(record.program, `${what}.program`, at && [...at, "program"]);
+  const program = json(record.program, `${what}.program`, at && [...at, "program"]);
+  jsonBytes(program, `${what}.program`, at && [...at, "program"]);
   const checked = checkProgram(program, ["state", "event"]);
   if (!checked.ok) {
-    if (checked.err.code === "EXPR_BOUNDS") fail("EVENT_LOOP_BOUNDS", `${what}.program exceeds expression bounds`);
-    if (checked.err.code === "EXPR_PATH") fail("EVENT_LOOP_REFERENCE", `${what}.program names an undeclared value`);
-    fail("EVENT_LOOP_PARSE", `${what}.program is not a valid expression`);
+    if (checked.err.code === "EXPR_BOUNDS") fail("EVENT_LOOP_BOUNDS", `${what}.program exceeds expression bounds`, at && [...at, "program"]);
+    if (checked.err.code === "EXPR_PATH") fail("EVENT_LOOP_REFERENCE", `${what}.program names an undeclared value`, at && [...at, "program"]);
+    fail("EVENT_LOOP_PARSE", `${what}.program is not a valid expression`, at && [...at, "program"]);
   }
 }
 
@@ -206,28 +207,30 @@ function matchesType(value: unknown, type: string): boolean {
   }
 }
 
-function parseSchema(value: unknown, withInitial: boolean, what: string): Map<string, string> {
-  const record = object(value, what);
-  exact(record, ["kind", "fields"], what);
-  if (record.kind !== "record" || !Array.isArray(record.fields) || record.fields.length > 64) {
-    fail("EVENT_LOOP_SCHEMA", `${what} must be a bounded record`);
+function parseSchema(value: unknown, withInitial: boolean, what: string, at?: readonly (string | number)[]): Map<string, string> {
+  const record = object(value, what, at);
+  exact(record, ["kind", "fields"], what, at);
+  if (record.kind !== "record") fail("EVENT_LOOP_SCHEMA", `${what}.kind`, at && [...at, "kind"]);
+  if (!Array.isArray(record.fields) || record.fields.length > 64) {
+    fail("EVENT_LOOP_SCHEMA", `${what}.fields must be a bounded list`, at && [...at, "fields"]);
   }
   const fields = new Map<string, string>();
   for (const [index, raw] of record.fields.entries()) {
-    const field = object(raw, `${what}.fields[${index}]`);
+    const fieldAt = at && [...at, "fields", index];
+    const field = object(raw, `${what}.fields[${index}]`, fieldAt);
     const keys = withInitial ? ["name", "type", "initial"] : ["name", "type"];
-    exact(field, keys, `${what}.fields[${index}]`);
-    const name = identifier(field.name, `${what}.fields[${index}].name`);
-    if (fields.has(name)) fail("EVENT_LOOP_ID", `${what} duplicates ${name}`);
+    exact(field, keys, `${what}.fields[${index}]`, fieldAt);
+    const name = identifier(field.name, `${what}.fields[${index}].name`, fieldAt && [...fieldAt, "name"]);
+    if (fields.has(name)) fail("EVENT_LOOP_ID", `${what} duplicates ${name}`, fieldAt && [...fieldAt, "name"]);
     const type = field.type;
     if (typeof type !== "string" || !TYPES.has(type)) {
-      fail("EVENT_LOOP_SCHEMA", `${what}.fields[${index}].type`);
+      fail("EVENT_LOOP_SCHEMA", `${what}.fields[${index}].type`, fieldAt && [...fieldAt, "type"]);
     }
     fields.set(name, type);
     if (withInitial) {
-      json(field.initial, `${what}.fields[${index}].initial`);
+      json(field.initial, `${what}.fields[${index}].initial`, fieldAt && [...fieldAt, "initial"]);
       if (!matchesType(field.initial, type)) {
-        fail("EVENT_LOOP_SCHEMA", `${what}.fields[${index}].initial does not match ${type}`);
+        fail("EVENT_LOOP_SCHEMA", `${what}.fields[${index}].initial does not match ${type}`, fieldAt && [...fieldAt, "initial"]);
       }
     }
   }
@@ -235,31 +238,32 @@ function parseSchema(value: unknown, withInitial: boolean, what: string): Map<st
 }
 
 function parseEvent(value: unknown, index: number): string {
-  const record = object(value, `events[${index}]`);
-  exact(record, ["id", "payload"], `events[${index}]`);
-  const id = identifier(record.id, `events[${index}].id`);
-  parseSchema(record.payload, false, `events[${index}].payload`);
+  const at = ["events", index];
+  const record = object(value, `events[${index}]`, at);
+  exact(record, ["id", "payload"], `events[${index}]`, at);
+  const id = identifier(record.id, `events[${index}].id`, [...at, "id"]);
+  parseSchema(record.payload, false, `events[${index}].payload`, [...at, "payload"]);
   return id;
 }
 
 function parseResult(value: unknown, writes: number, outputs: number, what: string, at?: readonly (string | number)[]): void {
-  const record = object(value, what);
-  if (typeof record.kind !== "string") fail("EVENT_LOOP_SEMANTIC", `${what}.kind`);
+  const record = object(value, what, at);
+  if (typeof record.kind !== "string") fail("EVENT_LOOP_SEMANTIC", `${what}.kind`, at && [...at, "kind"]);
   if (record.kind === "continue" || record.kind === "quiet") {
-    exact(record, ["kind"], what);
+    exact(record, ["kind"], what, at);
   } else if (record.kind === "defer") {
-    exact(record, ["kind", "key"], what);
-    expression(record.key, `${what}.key`);
+    exact(record, ["kind", "key"], what, at);
+    expression(record.key, `${what}.key`, at && [...at, "key"]);
   } else if (record.kind === "escalate") {
-    exact(record, ["kind", "request"], what);
-    expression(record.request, `${what}.request`);
+    exact(record, ["kind", "request"], what, at);
+    expression(record.request, `${what}.request`, at && [...at, "request"]);
   } else {
-    fail("EVENT_LOOP_SEMANTIC", `${what}.kind`);
+    fail("EVENT_LOOP_SEMANTIC", `${what}.kind`, at && [...at, "kind"]);
   }
   if ((record.kind === "defer" || record.kind === "escalate") && (writes !== 0 || outputs !== 0)) {
     fail("EVENT_LOOP_SEMANTIC", `${what} cannot commit writes or outputs`, at && [...at, "kind"]);
   }
-  if (record.kind === "quiet" && outputs !== 0) fail("EVENT_LOOP_SEMANTIC", `${what} quiet cannot emit outputs`);
+  if (record.kind === "quiet" && outputs !== 0) fail("EVENT_LOOP_SEMANTIC", `${what} quiet cannot emit outputs`, at && [...at, "kind"]);
 }
 
 function parseActor(
@@ -270,101 +274,111 @@ function parseActor(
   maxOutputs: number,
   maxStateBytes: number,
 ): string {
-  const record = object(value, `actors[${index}]`);
-  exact(record, ["id", "state", "transitions"], `actors[${index}]`);
-  const actorId = identifier(record.id, `actors[${index}].id`);
-  const stateFields = parseSchema(record.state, true, `actors[${index}].state`);
-  const state = object(record.state, `actors[${index}].state`);
+  const at = ["actors", index];
+  const record = object(value, `actors[${index}]`, at);
+  exact(record, ["id", "state", "transitions"], `actors[${index}]`, at);
+  const actorId = identifier(record.id, `actors[${index}].id`, [...at, "id"]);
+  const stateFields = parseSchema(record.state, true, `actors[${index}].state`, [...at, "state"]);
+  const state = object(record.state, `actors[${index}].state`, [...at, "state"]);
   const initial: Record<string, JsonValue> = {};
-  for (const raw of state.fields as unknown[]) {
-    const field = object(raw, "state field");
-    initial[identifier(field.name, "state field name")] = json(field.initial, "initial state field");
+  for (const [fieldIndex, raw] of (state.fields as unknown[]).entries()) {
+    const fieldAt = [...at, "state", "fields", fieldIndex];
+    const field = object(raw, "state field", fieldAt);
+    initial[identifier(field.name, "state field name", [...fieldAt, "name"])] =
+      json(field.initial, "initial state field", [...fieldAt, "initial"]);
   }
-  if (canonicalBytes(initial, `actors[${index}].initial`) > maxStateBytes) {
-    fail("EVENT_LOOP_BOUNDS", `actors[${index}].initial exceeds maxStateBytes`);
+  if (canonicalBytes(initial, `actors[${index}].initial`, [...at, "state"]) > maxStateBytes) {
+    fail("EVENT_LOOP_BOUNDS", `actors[${index}].initial exceeds maxStateBytes`, ["limits", "maxStateBytes"]);
   }
   if (!Array.isArray(record.transitions) || record.transitions.length < 1 || record.transitions.length > 256) {
-    fail("EVENT_LOOP_BOUNDS", `actors[${index}].transitions`);
+    fail("EVENT_LOOP_BOUNDS", `actors[${index}].transitions`, [...at, "transitions"]);
   }
   const transitionIds = new Set<string>();
   for (const [transitionIndex, raw] of record.transitions.entries()) {
-    const transition = object(raw, `actors[${index}].transitions[${transitionIndex}]`);
-    exact(transition, ["id", "on", "when", "writes", "outputs", "result"], `actors[${index}].transitions[${transitionIndex}]`);
-    const transitionId = identifier(transition.id, "transition.id");
-    if (transitionIds.has(transitionId)) fail("EVENT_LOOP_ID", `duplicate transition ${transitionId}`);
+    const transitionAt = [...at, "transitions", transitionIndex];
+    const transition = object(raw, `actors[${index}].transitions[${transitionIndex}]`, transitionAt);
+    exact(transition, ["id", "on", "when", "writes", "outputs", "result"], `actors[${index}].transitions[${transitionIndex}]`, transitionAt);
+    const transitionId = identifier(transition.id, "transition.id", [...transitionAt, "id"]);
+    if (transitionIds.has(transitionId)) fail("EVENT_LOOP_ID", `duplicate transition ${transitionId}`, [...transitionAt, "id"]);
     transitionIds.add(transitionId);
     if (typeof transition.on !== "string" || !eventIds.has(transition.on)) {
-      fail("EVENT_LOOP_REFERENCE", `transition ${transitionId} event`, ["actors", index, "transitions", transitionIndex, "on"]);
+      fail("EVENT_LOOP_REFERENCE", `transition ${transitionId} event`, [...transitionAt, "on"]);
     }
-    if (transition.when !== null) expression(transition.when, `transition ${transitionId}.when`, ["actors", index, "transitions", transitionIndex, "when"]);
-    if (!Array.isArray(transition.writes) || transition.writes.length > 64) fail("EVENT_LOOP_BOUNDS", `transition ${transitionId}.writes`);
+    if (transition.when !== null) expression(transition.when, `transition ${transitionId}.when`, [...transitionAt, "when"]);
+    if (!Array.isArray(transition.writes) || transition.writes.length > 64) fail("EVENT_LOOP_BOUNDS", `transition ${transitionId}.writes`, [...transitionAt, "writes"]);
     for (const [writeIndex, rawWrite] of transition.writes.entries()) {
-      const write = object(rawWrite, `transition ${transitionId}.writes[${writeIndex}]`);
-      exact(write, ["path", "value"], `transition ${transitionId}.writes[${writeIndex}]`);
+      const writeAt = [...transitionAt, "writes", writeIndex];
+      const write = object(rawWrite, `transition ${transitionId}.writes[${writeIndex}]`, writeAt);
+      exact(write, ["path", "value"], `transition ${transitionId}.writes[${writeIndex}]`, writeAt);
       if (!Array.isArray(write.path) || write.path.length !== 1) {
-        fail("EVENT_LOOP_BOUNDS", `transition ${transitionId}.path`);
+        fail("EVENT_LOOP_BOUNDS", `transition ${transitionId}.path`, [...writeAt, "path"]);
       }
       if (typeof write.path[0] !== "string" || !stateFields.has(write.path[0])) {
-        fail("EVENT_LOOP_REFERENCE", `transition ${transitionId}.state field`);
+        fail("EVENT_LOOP_REFERENCE", `transition ${transitionId}.state field`, [...writeAt, "path", 0]);
       }
-      for (const [pathIndex, segment] of write.path.entries()) identifier(segment, `transition ${transitionId}.path[${pathIndex}]`);
-      expression(write.value, `transition ${transitionId}.value`);
+      for (const [pathIndex, segment] of write.path.entries()) identifier(segment, `transition ${transitionId}.path[${pathIndex}]`, [...writeAt, "path", pathIndex]);
+      expression(write.value, `transition ${transitionId}.value`, [...writeAt, "value"]);
     }
-    if (!Array.isArray(transition.outputs) || transition.outputs.length > maxOutputs) {
-      fail("EVENT_LOOP_BOUNDS", `transition ${transitionId}.outputs`, ["limits", "maxOutputEvents"]);
+    if (!Array.isArray(transition.outputs) || transition.outputs.length > 64) {
+      fail("EVENT_LOOP_BOUNDS", `transition ${transitionId}.outputs`, [...transitionAt, "outputs"]);
+    }
+    if (transition.outputs.length > maxOutputs) {
+      fail("EVENT_LOOP_BOUNDS", `transition ${transitionId}.outputs exceeds maxOutputEvents`, ["limits", "maxOutputEvents"]);
     }
     for (const [outputIndex, rawOutput] of transition.outputs.entries()) {
-      const output = object(rawOutput, `transition ${transitionId}.outputs[${outputIndex}]`);
-      exact(output, ["kind", "target", "event", "payload"], `transition ${transitionId}.outputs[${outputIndex}]`);
-      if (output.kind !== "notify") fail("EVENT_LOOP_SEMANTIC", `transition ${transitionId}.output kind`);
+      const outputAt = [...transitionAt, "outputs", outputIndex];
+      const output = object(rawOutput, `transition ${transitionId}.outputs[${outputIndex}]`, outputAt);
+      exact(output, ["kind", "target", "event", "payload"], `transition ${transitionId}.outputs[${outputIndex}]`, outputAt);
+      if (output.kind !== "notify") fail("EVENT_LOOP_SEMANTIC", `transition ${transitionId}.output kind`, [...outputAt, "kind"]);
       if (output.target !== "self" && (typeof output.target !== "string" || !actorIds.has(output.target))) {
-        fail("EVENT_LOOP_REFERENCE", `transition ${transitionId}.output target`);
+        fail("EVENT_LOOP_REFERENCE", `transition ${transitionId}.output target`, [...outputAt, "target"]);
       }
       if (typeof output.event !== "string" || !eventIds.has(output.event)) {
-        fail("EVENT_LOOP_REFERENCE", `transition ${transitionId}.output event`);
+        fail("EVENT_LOOP_REFERENCE", `transition ${transitionId}.output event`, [...outputAt, "event"]);
       }
-      expression(output.payload, `transition ${transitionId}.output payload`);
+      expression(output.payload, `transition ${transitionId}.output payload`, [...outputAt, "payload"]);
     }
-    parseResult(transition.result, transition.writes.length, transition.outputs.length, `transition ${transitionId}.result`, ["actors", index, "transitions", transitionIndex, "result"]);
+    parseResult(transition.result, transition.writes.length, transition.outputs.length, `transition ${transitionId}.result`, [...transitionAt, "result"]);
   }
   return actorId;
 }
 
 function parseEventLoop(value: unknown): RecordValue {
-  const root = object(value, "event-loop");
+  const root = object(value, "event-loop", []);
   exact(root, ["contract", "behavior", "limits", "events", "actors", "digest"], "event-loop", []);
   if (root.contract !== "algal.event-loop.v1") fail("EVENT_LOOP_CONTRACT", "event-loop.contract", ["contract"]);
-  const behavior = object(root.behavior, "behavior");
+  const behavior = object(root.behavior, "behavior", ["behavior"]);
   exact(behavior, ["id", "revision", "sourceDigest", "digest"], "behavior", ["behavior"]);
-  identifier(behavior.id, "behavior.id");
-  integer(behavior.revision, "behavior.revision", 1, 2_147_483_647);
+  identifier(behavior.id, "behavior.id", ["behavior", "id"]);
+  integer(behavior.revision, "behavior.revision", 1, 2_147_483_647, ["behavior", "revision"]);
   digest(behavior.sourceDigest, "behavior.sourceDigest", ["behavior", "sourceDigest"]);
-  verifyDigest(behavior, "behavior");
-  const limits = object(root.limits, "limits");
-  exact(limits, ["maxEventBytes", "maxStateBytes", "maxOutputEvents", "maxTransitionFuel", "maxMailboxDepth"], "limits");
+  verifyDigest(behavior, "behavior", ["behavior"]);
+  const limits = object(root.limits, "limits", ["limits"]);
+  exact(limits, ["maxEventBytes", "maxStateBytes", "maxOutputEvents", "maxTransitionFuel", "maxMailboxDepth"], "limits", ["limits"]);
   integer(limits.maxEventBytes, "limits.maxEventBytes", 1, 65_536, ["limits", "maxEventBytes"]);
-  integer(limits.maxStateBytes, "limits.maxStateBytes", 1, 262_144);
-  integer(limits.maxOutputEvents, "limits.maxOutputEvents", 0, 64);
-  integer(limits.maxTransitionFuel, "limits.maxTransitionFuel", 1, 100_000);
-  integer(limits.maxMailboxDepth, "limits.maxMailboxDepth", 1, 1_024);
-  if (!Array.isArray(root.events) || root.events.length < 1 || root.events.length > 128) fail("EVENT_LOOP_BOUNDS", "events");
+  integer(limits.maxStateBytes, "limits.maxStateBytes", 1, 262_144, ["limits", "maxStateBytes"]);
+  integer(limits.maxOutputEvents, "limits.maxOutputEvents", 0, 64, ["limits", "maxOutputEvents"]);
+  integer(limits.maxTransitionFuel, "limits.maxTransitionFuel", 1, 100_000, ["limits", "maxTransitionFuel"]);
+  integer(limits.maxMailboxDepth, "limits.maxMailboxDepth", 1, 1_024, ["limits", "maxMailboxDepth"]);
+  if (!Array.isArray(root.events) || root.events.length < 1 || root.events.length > 128) fail("EVENT_LOOP_BOUNDS", "events", ["events"]);
   const eventIds = new Set<string>();
   for (const [index, raw] of root.events.entries()) {
     const id = parseEvent(raw, index);
     if (eventIds.has(id)) fail("EVENT_LOOP_ID", `duplicate event ${id}`, ["events", index, "id"]);
     eventIds.add(id);
   }
-  if (!Array.isArray(root.actors) || root.actors.length < 1 || root.actors.length > 64) fail("EVENT_LOOP_BOUNDS", "actors");
+  if (!Array.isArray(root.actors) || root.actors.length < 1 || root.actors.length > 64) fail("EVENT_LOOP_BOUNDS", "actors", ["actors"]);
   const actorIds = new Set<string>();
   for (const [index, raw] of root.actors.entries()) {
-    const actor = object(raw, `actors[${index}]`);
-    exact(actor, ["id", "state", "transitions"], `actors[${index}]`);
-    const id = identifier(actor.id, `actors[${index}].id`);
-    if (actorIds.has(id)) fail("EVENT_LOOP_ID", `duplicate actor ${id}`);
+    const actorAt = ["actors", index];
+    const actor = object(raw, `actors[${index}]`, actorAt);
+    exact(actor, ["id", "state", "transitions"], `actors[${index}]`, actorAt);
+    const id = identifier(actor.id, `actors[${index}].id`, [...actorAt, "id"]);
+    if (actorIds.has(id)) fail("EVENT_LOOP_ID", `duplicate actor ${id}`, [...actorAt, "id"]);
     actorIds.add(id);
   }
   for (const [index, raw] of root.actors.entries()) parseActor(raw, index, eventIds, actorIds, limits.maxOutputEvents as number, limits.maxStateBytes as number);
-  verifyDigest(root, "event-loop");
+  verifyDigest(root, "event-loop", []);
   return root;
 }
 
@@ -413,7 +427,7 @@ function path(value: unknown, what: string): string {
   return result;
 }
 
-function parseProject(value: unknown): RecordValue {
+function parseProjectRecord(value: unknown): RecordValue {
   const root = object(value, "project");
   exact(root, ["contract", "id", "entry", "files", "digest"], "project");
   if (root.contract !== "algal.language-project.v1") fail("EVENT_LOOP_CONTRACT", "project.contract");
@@ -432,6 +446,16 @@ function parseProject(value: unknown): RecordValue {
   if (!paths.has(entry)) fail("EVENT_LOOP_REFERENCE", "project.entry");
   verifyDigest(root, "project");
   return root;
+}
+
+// The fixture-reading boundary checks the bytes of every referenced file.
+// Record-only validation cannot establish the project closure's byte limit.
+async function parseProject(
+  value: unknown,
+  readBytes: (path: string) => Promise<Uint8Array> = (filePath) => readFile(join(ROOT, filePath)),
+): Promise<{ byteLength: number; projectDigest: string; closureDigest: string }> {
+  parseProjectRecord(value);
+  return verifyProjectClosure(value, readBytes);
 }
 
 function parseFixtureEntry(value: unknown, expectedKind: "actor" | "project" | "invalid"): void {
@@ -536,9 +560,9 @@ function withoutDigest(value: unknown): JsonValue {
   return json(copy, "record without digest");
 }
 
-function verifyDigest(record: RecordValue, what: string): void {
-  if (digest(record.digest, `${what}.digest`) !== canonicalDigest(withoutDigest(record))) {
-    fail("EVENT_LOOP_DIGEST", `${what}.digest does not match canonical content`);
+function verifyDigest(record: RecordValue, what: string, at?: readonly (string | number)[]): void {
+  if (digest(record.digest, `${what}.digest`, at && [...at, "digest"]) !== canonicalDigest(withoutDigest(record))) {
+    fail("EVENT_LOOP_DIGEST", `${what}.digest does not match canonical content`, at && [...at, "digest"]);
   }
 }
 
@@ -821,7 +845,7 @@ describe("language benchmark contract fixtures", () => {
     const corpus = await load("corpus.json");
     parseEventLoop(actor);
     parseEvents(events, actor);
-    parseProject(project);
+    await parseProject(project);
     parseCorpus(corpus);
     const actorRecord = object(actor, "actor");
     const behavior = object(actorRecord.behavior, "behavior");
@@ -900,18 +924,11 @@ describe("language benchmark contract fixtures", () => {
     const projectEntry = object((fixtures.projects as unknown[])[0], "project fixture");
     const projectExpected = object(projectEntry.expected, "project expected");
     const project = object(await load(path(projectEntry.path, "project fixture path")), "project");
-    parseProject(project);
-    expect(projectExpected.projectDigest).toBe(project.digest);
-    expect(projectExpected.closureDigest).toBe(canonicalDigest(project.files));
-    let closureBytes = 0;
-    for (const raw of project.files as unknown[]) {
-      const file = object(raw, "project file");
-      const bytes = await readFile(join(ROOT, path(file.path, "project file path")));
-      closureBytes += bytes.byteLength;
-      expect(rawDigest(bytes)).toBe(digest(file.digest, "project file digest"));
-    }
-    expect(closureBytes).toBeGreaterThan(0);
-    expect(closureBytes).toBeLessThanOrEqual(262_144);
+    const closure = await parseProject(project);
+    expect(projectExpected.projectDigest).toBe(closure.projectDigest);
+    expect(projectExpected.closureDigest).toBe(closure.closureDigest);
+    expect(closure.byteLength).toBeGreaterThan(0);
+    expect(closure.byteLength).toBeLessThanOrEqual(262_144);
     const result = object(await load("results/smoke.json"), "result");
     const cases = result.cases as unknown[];
     const actorObserved = object(object(cases.find((raw) => object(raw, "case").id === actorEntry.id), "actor case").observed, "actor observed");
@@ -919,8 +936,8 @@ describe("language benchmark contract fixtures", () => {
     expect(actorObserved.interfaceDigest).toBe(canonicalDigest({ events: actor.events, actors: actorSchemas }));
     expect(actorObserved.eventDigest).toBe(eventVector.digest);
     const projectObserved = object(object(cases.find((raw) => object(raw, "case").id === projectEntry.id), "project case").observed, "project observed");
-    expect(projectObserved.projectDigest).toBe(project.digest);
-    expect(projectObserved.closureDigest).toBe(canonicalDigest(project.files));
+    expect(projectObserved.projectDigest).toBe(closure.projectDigest);
+    expect(projectObserved.closureDigest).toBe(closure.closureDigest);
   });
 
   test("every invalid fixture fails with its recorded code and bounded span", async () => {
@@ -1054,6 +1071,97 @@ describe("language benchmark contract fixtures", () => {
     expect(errorCode(() => expression(envelope(["quote", [quoted]]), "expression"))).toBe("EVENT_LOOP_BOUNDS");
   });
 
+  test("contract-owned unknown keys have exact UTF-8 key spans at each depth", async () => {
+    const base = await load("actors/echo.json");
+    const paths: readonly (readonly (string | number)[])[] = [
+      [], ["behavior"], ["limits"], ["events", 0], ["events", 0, "payload"],
+      ["events", 0, "payload", "fields", 0], ["actors", 0], ["actors", 0, "state"],
+      ["actors", 0, "state", "fields", 0], ["actors", 0, "transitions", 0],
+      ["actors", 0, "transitions", 0, "when"],
+      ["actors", 0, "transitions", 0, "writes", 0],
+      ["actors", 0, "transitions", 0, "writes", 0, "value"],
+      ["actors", 0, "transitions", 0, "outputs", 0],
+      ["actors", 0, "transitions", 0, "outputs", 0, "payload"],
+      ["actors", 0, "transitions", 0, "result"],
+    ];
+    for (const at of paths) {
+      const actor = structuredClone(base) as RecordValue;
+      let field: unknown = actor;
+      for (const part of at) field = (field as Record<string | number, unknown>)[part];
+      const key = "éxtra";
+      (field as RecordValue)[key] = true;
+      const bytes = new TextEncoder().encode(JSON.stringify(actor));
+      const span = locateJsonSpan(bytes, [...at, key], true);
+      expect(checkEventLoopBytes(bytes), at.join(".")).toEqual({ code: "EVENT_LOOP_UNKNOWN_KEY", span });
+      expect(new TextDecoder().decode(bytes.subarray(span.start, span.end))).toBe(key);
+    }
+  });
+
+  test("all behavior numeric bounds return exact UTF-8 value spans", async () => {
+    const base = await load("actors/echo.json");
+    for (const [key, min, max] of [
+      ["maxEventBytes", 1, 65_536], ["maxStateBytes", 1, 262_144],
+      ["maxOutputEvents", 0, 64], ["maxTransitionFuel", 1, 100_000],
+      ["maxMailboxDepth", 1, 1_024],
+    ] as const) {
+      for (const value of [min - 1, max + 1, 1.5, "2"]) {
+        const actor = structuredClone(base) as RecordValue;
+        object(actor.limits, "limits")[key] = value;
+        const bytes = new TextEncoder().encode(JSON.stringify(actor));
+        const span = locateJsonSpan(bytes, ["limits", key]);
+        expect(checkEventLoopBytes(bytes), `${key}=${value}`).toEqual({ code: "EVENT_LOOP_BOUNDS", span });
+        expect(new TextDecoder().decode(bytes.subarray(span.start, span.end))).toBe(String(value));
+      }
+      const actor = structuredClone(base) as RecordValue;
+      object(actor.limits, "limits")[key] = max;
+      actor.digest = canonicalDigest(withoutDigest(actor));
+      expect(checkEventLoopBytes(new TextEncoder().encode(JSON.stringify(actor))), `${key} max`).toEqual({ code: "ACCEPTED" });
+    }
+    const atZero = structuredClone(base) as RecordValue;
+    object(atZero.limits, "limits").maxOutputEvents = 0;
+    const transition = object((object((atZero.actors as unknown[])[0], "actor").transitions as unknown[])[0], "transition");
+    transition.outputs = [];
+    atZero.digest = canonicalDigest(withoutDigest(atZero));
+    expect(checkEventLoopBytes(new TextEncoder().encode(JSON.stringify(atZero)))).toEqual({ code: "ACCEPTED" });
+    for (const revision of [0, 2_147_483_648, 1.5]) {
+      const actor = structuredClone(base) as RecordValue;
+      object(actor.behavior, "behavior").revision = revision;
+      const bytes = new TextEncoder().encode(JSON.stringify(actor));
+      expect(checkEventLoopBytes(bytes)).toEqual({
+        code: "EVENT_LOOP_BOUNDS", span: locateJsonSpan(bytes, ["behavior", "revision"]),
+      });
+    }
+    const highRevision = structuredClone(base) as RecordValue;
+    const behavior = object(highRevision.behavior, "behavior");
+    behavior.revision = 2_147_483_647;
+    behavior.digest = canonicalDigest(withoutDigest(behavior));
+    highRevision.digest = canonicalDigest(withoutDigest(highRevision));
+    expect(checkEventLoopBytes(new TextEncoder().encode(JSON.stringify(highRevision)))).toEqual({ code: "ACCEPTED" });
+  });
+
+  test("project fixture boundary rejects a closure one byte over the limit", async () => {
+    const contents = new Map<string, Uint8Array>(Array.from({ length: 17 }, (_, i) =>
+      [`file-${i}`, new Uint8Array(i === 16 ? 1 : 16_384).fill(97)] as const));
+    const files = [...contents].map(([filePath, bytes]) => ({ path: filePath, digest: rawDigest(bytes) }));
+    const body = { contract: "algal.language-project.v1", id: "fixture", entry: "file-0", files };
+    const project = { ...body, digest: canonicalDigest(body) };
+    const readBytes = async (filePath: string): Promise<Uint8Array> => contents.get(filePath)!;
+    const full = { ...project, files: files.slice(0, 16) };
+    full.digest = canonicalDigest(withoutDigest(full));
+    expect((await parseProject(full, readBytes)).byteLength).toBe(262_144);
+    try {
+      await parseProject(project, readBytes);
+      throw new Error("closure above limit was accepted");
+    } catch (error) {
+      if (!(error instanceof ProjectClosureError)) throw error;
+      expect(error.code).toBe("EVENT_LOOP_BOUNDS");
+      expect(error.at).toEqual(["files", 16, "path"]);
+      const bytes = new TextEncoder().encode(JSON.stringify(project));
+      const span = locateJsonSpan(bytes, error.at);
+      expect(new TextDecoder().decode(bytes.subarray(span.start, span.end))).toBe("file-16");
+    }
+  });
+
   test("unknown keys and first out-of-range limits are rejected", async () => {
     const actor = object(await load("actors/echo.json"), "actor");
     const unknown = structuredClone(actor) as RecordValue;
@@ -1072,7 +1180,7 @@ describe("language benchmark contract fixtures", () => {
     const records: [unknown, (value: unknown) => unknown][] = [
       [actor, parseEventLoop],
       [events, (value) => parseEvents(value, actor)],
-      [await load("projects/echo.project.json"), parseProject],
+      [await load("projects/echo.project.json"), parseProjectRecord],
       [await load("corpus.json"), parseCorpus],
       [await load("results/smoke.json"), (value) => parseBenchmarkResult(value, awaitCorpus)],
     ];
@@ -1344,7 +1452,7 @@ describe("language benchmark contract fixtures", () => {
     expectMutation(actor, parseEventLoop, (copy) => { object((object((copy.actors as unknown[])[0], "actor").transitions as unknown[])[0], "transition").writes = Array(65).fill({}); }, "EVENT_LOOP_BOUNDS");
     expectMutation(actor, parseEventLoop, (copy) => { object((object((copy.actors as unknown[])[0], "actor").transitions as unknown[])[0], "transition").outputs = Array(65).fill({}); }, "EVENT_LOOP_BOUNDS");
     expectMutation(events, (value) => parseEvents(value, actor), (copy) => { copy.events = Array(257).fill((events.events as unknown[])[0]); }, "EVENT_LOOP_BOUNDS");
-    expectMutation(project, parseProject, (copy) => { copy.files = Array(65).fill((project.files as unknown[])[0]); }, "EVENT_LOOP_BOUNDS");
+    expectMutation(project, parseProjectRecord, (copy) => { copy.files = Array(65).fill((project.files as unknown[])[0]); }, "EVENT_LOOP_BOUNDS");
     expectMutation(corpus, parseCorpus, (copy) => { object(copy.fixtures, "fixtures").invalid = Array(129).fill((object(corpus.fixtures, "fixtures").invalid as unknown[])[0]); }, "EVENT_LOOP_BOUNDS");
     expectMutation(result, (value) => parseBenchmarkResult(value, corpus), (copy) => { object(copy.protocol, "protocol").warmupSamples = 101; }, "EVENT_LOOP_BOUNDS");
     const protocol = object(result.protocol, "protocol");

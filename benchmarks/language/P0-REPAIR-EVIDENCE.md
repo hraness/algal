@@ -1,0 +1,17 @@
+# P0 repair evidence, 2026-10-11
+
+Status at preparation: **P0_CONTRACT_GATE_FAILED**. This repair belongs to draft PR #276 on branch `codex/p0-contract-freeze-20261009`, whose parent is `c5792e0a57e52d2e4ee534f882cf6065cbb67070`. The parent's green `Required` does **not** cover the repair. The independent review of the local repair recommended **do not merge** because the full gates and exact-head CI had not passed; a positive independent review is still needed. P1 and P2 remain blocked. The no-separate-runtime contract, the full-source span for malformed JSON/UTF-8, and attribution of output/state overages to the configured limit are agent decisions the owner may revisit.
+
+## Repair
+
+The project fixture-reading boundary calls `verifyProjectClosure` after record validation, using the raw bytes of each referenced file. It checks raw digests and sums bytes before accepting the closure identity. A 262,144-byte in-memory project passes through that boundary; a 262,145-byte project fails at its excess file path with a located UTF-8 span. The checked project's expected and closure digests now come from this boundary rather than an independent manual loop. The helper tests file count, per-file bytes, paths, IDs, missing files, changed bytes, unknown keys, and wrong-version contract diagnostics.
+
+The event-loop byte checker carries structured paths through contract-owned nested objects, schema fields, transitions, expressions, JSON values, and limits and revision numbers. It returns exact UTF-8 spans for unknown keys and out-of-range numeric limits. Tests cover unknown keys at 16 record positions, both invalid edges and noninteger values of each numeric limit, valid upper edges, zero outputs, and revision edges. The ten pinned invalid fixtures still return their original codes and spans. The 64-byte ID correction is included. These fixtures are synthetic contract checks, not compiler/source provenance, measured performance, an event-loop runtime, runtime parity for the proposed contract, or cumulative-skill evidence.
+
+## Checks and blockers
+
+Fresh on the repaired local bytes: `bun test benchmarks/language/contract.test.ts benchmarks/language/span.test.ts benchmarks/language/project-closure.test.ts` passed (30 tests, 358 assertions); `bun run typecheck`, `bun run lint`, `bun run docs:check`, `bun run build:site`, `cargo fmt --all -- --check`, and `git diff HEAD --check` passed. `bun run check:copy` is not defined in this repository; it is not a passed check.
+
+Earlier local reviews, before the latest assertions/evidence, reported: `bun run check` timed out after 600 seconds during tests, after a loopback `EADDRINUSE`; default locked Cargo test/clippy/build hit the pinned `apple-foundation` libgit2 SSL `-9808` fetch error. Using `CARGO_NET_GIT_FETCH_WITH_CLI=true`, Cargo workspace tests built but failed in `tests/http.rs`; focused HTTP recompilation timed out. `bun scripts/application-parity.ts` timed out after 600 seconds. An earlier native parity pass was against an existing binary, not a freshly built one. None of these is a passing full gate on these exact bytes. Loopback and dependency-fetch-capable CI can replay these checks on a published head.
+
+Keep PR #276 draft without auto-merge. Before integration, require exact-head green `Required`, a positive independent review, and a recommendation to merge for this selected lane. Do not infer a gate pass from the parent's earlier green check.

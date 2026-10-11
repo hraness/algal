@@ -18,7 +18,7 @@ The fixture test parses foreign JSON as `unknown`, rejects unknown keys, checks
 all fixture digests, and exercises the listed failure codes:
 
 ```sh
-bun test benchmarks/language/contract.test.ts benchmarks/language/span.test.ts
+bun test benchmarks/language/contract.test.ts benchmarks/language/span.test.ts benchmarks/language/project-closure.test.ts
 ```
 
 ## Baseline layout
@@ -28,6 +28,8 @@ benchmarks/language/
   README.md
   corpus.json
   contract.test.ts
+  project-closure.ts
+  project-closure.test.ts
   span.ts
   span.test.ts
   actors/
@@ -43,7 +45,10 @@ benchmarks/language/
 
 `actors/echo.json` is the one valid `algal.event-loop.v1` behavior fixture.
 `actors/echo.events.json` is its deterministic input vector. The project fixture
-pins both files as one closure. The ten invalid behavior fixtures each record a
+pins both files as one closure. The fixture-reading test checks the raw bytes of
+every referenced file, their digests, and the summed 262,144-byte limit. A
+262,145-byte in-memory closure fails at its excess file path. The ten invalid
+behavior fixtures each record a
 specific parser failure. Colocated tests also mutate copies of the valid
 fixtures to test digest, payload, byte-limit, and transition rejections. The
 fixture count is deliberately small for the P0 contract gate. It is not the 100-program corpus target in the north-star plan.
@@ -153,7 +158,9 @@ with the span covering the complete source file. A valid JSON root that is
 not an object also receives a complete-source span. An empty file or a file
 above 16,384 bytes fails the input bound before a span can be reported. The ten pinned invalid
 fixtures are valid JSON; the malformed-byte cases are tested in memory.
-Changing a pinned fixture diagnostic requires a corpus revision.
+Unknown behavior fields and out-of-range numeric limits are also tested for
+exact UTF-8 key or value spans. Changing a pinned fixture diagnostic requires a
+corpus revision.
 
 ## Identity rules
 
@@ -317,7 +324,8 @@ value limits before their enclosing state and event byte budgets are checked.
 
 | Value | Bound |
 | --- | --- |
-| corpus id, case id, operation, toolchain and environment string | 1 to 128 UTF-8 bytes |
+| corpus id and case id | 1 to 64 UTF-8 bytes, lower kebab case |
+| operation, toolchain and environment string | 1 to 128 UTF-8 bytes |
 | corpus fixtures | 1 to 256 total entries; at most 128 invalid entries |
 | source file | 1 to 16,384 bytes |
 | project closure | 1 to 262,144 bytes and at most 64 files |
