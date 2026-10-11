@@ -133,8 +133,11 @@ Each actor fixture entry is:
 A project entry uses the same `id`, `path`, `kind`, and `sha256` fields. Its
 `expected` object contains `check: "accepted"`, `projectDigest`, and
 `closureDigest`. `projectDigest` covers the project record without `digest`.
-`closureDigest` covers the canonical ordered `files` array. Every project path
-is relative, uses `/`, and is at most 512 UTF-8 bytes.
+`closureDigest` covers the canonical ordered `files` array. Project file paths
+and corpus fixture paths, including `eventPath`, use `/` and contain 1 to 512
+UTF-8 bytes. They cannot start with a drive prefix or `/`, contain a control
+character or backslash, or include empty, `.` or `..` components. The corpus
+checks all fixture paths before reading any fixture file.
 
 An invalid entry has `kind: "invalid"` and this expected object:
 

@@ -96,23 +96,26 @@ test("file size, file count, id and path limits reject the first excess", async 
     expect((await rejected(data.project, data.read)).code).toBe("EVENT_LOOP_ID");
   }
   data.project.id = "fixture";
-  for (const path of ["a", "a".repeat(512), "é".repeat(256)]) {
+  for (const path of ["a", "a".repeat(512), "é".repeat(256), "a\u00a0b"]) {
     data.project.entry = path;
     data.project.files[0]!.path = path;
     rehash(data.project);
     expect((await verifyProjectClosure(data.project, async () => source(1))).byteLength).toBe(1);
   }
-  for (const path of ["", "a".repeat(513), "é".repeat(257), "../escape", "a\\b", "C:/escape", "C:escape", "a\0b", "a\nb"]) {
+  for (const path of ["", "a".repeat(513), "é".repeat(257), "../escape", "a\\b", "C:/escape", "C:escape", "a\0b", "a\nb", "a\u0080b", "a\u009fb"]) {
     data.project.entry = path;
     expect((await rejected(data.project, data.read)).code).toBe("EVENT_LOOP_PARSE");
   }
-  for (const path of ["C:/escape", "a\0b"]) {
+  for (const path of ["C:/escape", "a\0b", "a\u0085b", "a\u009fb"]) {
     data.project.entry = "file-0";
     data.project.files[0]!.path = path;
     rehash(data.project);
     const error = await rejected(data.project, async () => { throw new Error("must not read"); });
     expect(error.code).toBe("EVENT_LOOP_PARSE");
     expect(error.at).toEqual(["files", 0, "path"]);
+    const encoded = new TextEncoder().encode(JSON.stringify(data.project));
+    const span = locateJsonSpan(encoded, error.at);
+    expect(new TextDecoder().decode(encoded.subarray(span.start, span.end))).toBe(JSON.stringify(path).slice(1, -1));
   }
 });
 

@@ -42,11 +42,14 @@ function id(value: unknown, at: At): string {
   return value;
 }
 
-function isProjectPath(value: unknown): value is string {
+export function isProjectPath(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 &&
     Buffer.byteLength(value, "utf8") <= MAX_PATH_BYTES && !value.startsWith("/") &&
     !value.includes("\\") && !/^[a-zA-Z]:/.test(value) &&
-    !Array.from(value).some((char) => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127) &&
+    !Array.from(value).some((char) => {
+      const code = char.charCodeAt(0);
+      return code < 32 || (code >= 127 && code <= 159);
+    }) &&
     !value.split("/").some((part) => !part || part === "." || part === "..");
 }
 

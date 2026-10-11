@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { checkProgram, EXPR_BOUNDS } from "../../src/expr";
 import { canonicalize, isJsonValue, type JsonValue } from "../../src/values";
 import { locateJsonSpan, type ByteSpan } from "./span";
-import { ProjectClosureError, verifyProjectClosure } from "./project-closure";
+import { isProjectPath, ProjectClosureError, verifyProjectClosure } from "./project-closure";
 
 const ROOT = import.meta.dir;
 const DIGEST = /^sha256:[0-9a-f]{64}$/;
@@ -419,11 +419,9 @@ function parseEvents(value: unknown, behaviorValue: unknown): RecordValue {
   return root;
 }
 
-function path(value: unknown, what: string): string {
-  const result = text(value, what, 512);
-  if (result.startsWith("/") || result.includes("\\") || result.split("/").some((part) => part.length === 0 || part === "." || part === "..")) {
-    fail("EVENT_LOOP_PARSE", `${what} is not a relative POSIX path`);
-  }
+function path(value: unknown, what: string, at?: readonly (string | number)[]): string {
+  const result = text(value, what, 512, at);
+  if (!isProjectPath(result)) fail("EVENT_LOOP_PARSE", `${what} is not a relative POSIX path`, at);
   return result;
 }
 
@@ -458,11 +456,15 @@ async function parseProject(
   return verifyProjectClosure(value, readBytes);
 }
 
-function parseFixtureEntry(value: unknown, expectedKind: "actor" | "project" | "invalid"): void {
-  const entry = object(value, "fixture");
-  exact(entry, ["id", "path", "kind", "sha256", "expected"], "fixture");
-  identifier(entry.id, "fixture.id");
-  path(entry.path, "fixture.path");
+function parseFixtureEntry(
+  value: unknown,
+  expectedKind: "actor" | "project" | "invalid",
+  at: readonly (string | number)[],
+): void {
+  const entry = object(value, "fixture", at);
+  exact(entry, ["id", "path", "kind", "sha256", "expected"], "fixture", at);
+  identifier(entry.id, "fixture.id", [...at, "id"]);
+  path(entry.path, "fixture.path", [...at, "path"]);
   if (entry.kind !== expectedKind) fail("EVENT_LOOP_PARSE", "fixture.kind");
   digest(entry.sha256, "fixture.sha256");
   const expected = object(entry.expected, "fixture.expected");
@@ -471,7 +473,7 @@ function parseFixtureEntry(value: unknown, expectedKind: "actor" | "project" | "
     if (expected.check !== "accepted") fail("EVENT_LOOP_PARSE", "fixture.expected.check");
     digest(expected.artifactDigest, "fixture.expected.artifactDigest");
     digest(expected.interfaceDigest, "fixture.expected.interfaceDigest");
-    path(expected.eventPath, "fixture.expected.eventPath");
+    path(expected.eventPath, "fixture.expected.eventPath", [...at, "expected", "eventPath"]);
     digest(expected.eventSha256, "fixture.expected.eventSha256");
     digest(expected.eventDigest, "fixture.expected.eventDigest");
   } else if (expectedKind === "project") {
@@ -528,11 +530,13 @@ function parseCorpus(value: unknown): RecordValue {
   const fixtureIds = new Set<string>();
   const fixturePaths = new Set<string>();
   const parseFixtureGroup = (entries: unknown[], kind: "actor" | "project" | "invalid"): void => {
-    for (const entry of entries) {
-      parseFixtureEntry(entry, kind);
-      const record = object(entry, "fixture");
-      const id = identifier(record.id, "fixture.id");
-      const fixturePath = path(record.path, "fixture.path");
+    const group = kind === "actor" ? "actors" : kind === "project" ? "projects" : "invalid";
+    for (const [index, entry] of entries.entries()) {
+      const at = ["fixtures", group, index];
+      parseFixtureEntry(entry, kind, at);
+      const record = object(entry, "fixture", at);
+      const id = identifier(record.id, "fixture.id", [...at, "id"]);
+      const fixturePath = path(record.path, "fixture.path", [...at, "path"]);
       if (fixtureIds.has(id)) fail("EVENT_LOOP_ID", `duplicate fixture ${id}`);
       if (fixturePaths.has(fixturePath)) fail("EVENT_LOOP_ID", `duplicate fixture path ${fixturePath}`);
       fixtureIds.add(id);
@@ -544,6 +548,29 @@ function parseCorpus(value: unknown): RecordValue {
   parseFixtureGroup(fixtures.invalid, "invalid");
   verifyDigest(root, "corpus");
   return root;
+}
+
+// Check every path in the corpus before reading any referenced fixture bytes.
+async function readCorpusFixtures(
+  value: unknown,
+  readBytes: (filePath: string) => Promise<Uint8Array> = (filePath) => readFile(join(ROOT, filePath)),
+): Promise<Map<string, Uint8Array>> {
+  const corpus = parseCorpus(value);
+  const fixtures = object(corpus.fixtures, "corpus.fixtures");
+  const contents = new Map<string, Uint8Array>();
+  for (const group of ["actors", "projects", "invalid"] as const) {
+    for (const [index, raw] of (fixtures[group] as unknown[]).entries()) {
+      const entry = object(raw, "fixture");
+      const at = ["fixtures", group, index, "path"];
+      const fixturePath = path(entry.path, "fixture.path", at);
+      const bytes = await readBytes(fixturePath);
+      if (!(bytes instanceof Uint8Array) || bytes.byteLength < 1 || bytes.byteLength > 16_384) {
+        fail("EVENT_LOOP_BOUNDS", "fixture source bytes", at);
+      }
+      contents.set(fixturePath, bytes);
+    }
+  }
+  return contents;
 }
 
 function canonicalDigest(value: unknown): string {
@@ -896,13 +923,13 @@ describe("language benchmark contract fixtures", () => {
   test("corpus fixture entries pin raw bytes and expected identities", async () => {
     const corpus = object(await load("corpus.json"), "corpus");
     const fixtures = object(corpus.fixtures, "corpus.fixtures");
+    const contents = await readCorpusFixtures(corpus);
     for (const group of [fixtures.actors, fixtures.projects, fixtures.invalid]) {
       if (!Array.isArray(group)) throw new Error("corpus fixture group did not parse");
       for (const raw of group) {
         const entry = object(raw, "fixture");
-        const bytes = await readFile(join(ROOT, text(entry.path, "fixture.path", 512)));
-        expect(bytes.byteLength).toBeGreaterThan(0);
-        expect(bytes.byteLength).toBeLessThanOrEqual(16_384);
+        const bytes = contents.get(path(entry.path, "fixture.path"));
+        if (!bytes) throw new Error("checked fixture bytes missing");
         expect(rawDigest(bytes)).toBe(digest(entry.sha256, "fixture.sha256"));
       }
     }
@@ -940,14 +967,74 @@ describe("language benchmark contract fixtures", () => {
     expect(projectObserved.closureDigest).toBe(closure.closureDigest);
   });
 
+  test("corpus fixture paths reject drive prefixes and controls before any reads with located spans", async () => {
+    const base = await load("corpus.json");
+    const cases = [
+      { group: "actors", field: "path", value: "C:/escape" },
+      { group: "projects", field: "path", value: "C:escape" },
+      { group: "invalid", field: "path", value: "a\nb" },
+      { group: "actors", field: "path", value: "a\0b" },
+      { group: "actors", field: "path", value: "a\u007fb" },
+      { group: "actors", field: "eventPath", value: "D:/events" },
+      { group: "actors", field: "eventPath", value: "a\rb" },
+    ] as const;
+    for (const { group, field, value } of cases) {
+      const corpus = structuredClone(base) as RecordValue;
+      const fixtures = object(corpus.fixtures, "fixtures");
+      const entry = object((fixtures[group] as unknown[])[0], "fixture");
+      const at: (string | number)[] = ["fixtures", group, 0];
+      if (field === "eventPath") {
+        object(entry.expected, "fixture.expected").eventPath = value;
+        at.push("expected", "eventPath");
+      } else {
+        entry.path = value;
+        at.push("path");
+      }
+      let reads = 0;
+      try {
+        await readCorpusFixtures(corpus, async () => {
+          reads++;
+          throw new Error("unsafe fixture path reached file read");
+        });
+        throw new Error("unsafe fixture path was accepted");
+      } catch (error) {
+        if (!(error instanceof FixtureError)) throw error;
+        expect(error.code, value).toBe("EVENT_LOOP_PARSE");
+        expect(error.at, value).toEqual(at);
+        const bytes = new TextEncoder().encode(JSON.stringify(corpus));
+        const span = locateJsonSpan(bytes, at);
+        expect(new TextDecoder().decode(bytes.subarray(span.start, span.end))).toBe(JSON.stringify(value).slice(1, -1));
+      }
+      expect(reads, value).toBe(0);
+    }
+  });
+
+  test("corpus fixture reads keep only 1 to 16384 bytes", async () => {
+    const corpus = await load("corpus.json");
+    const maximum = new Uint8Array(16_384);
+    expect((await readCorpusFixtures(corpus, async () => maximum)).size).toBe(12);
+    for (const bytes of [new Uint8Array(0), new Uint8Array(16_385)]) {
+      try {
+        await readCorpusFixtures(corpus, async () => bytes);
+        throw new Error("invalid fixture byte length was accepted");
+      } catch (error) {
+        if (!(error instanceof FixtureError)) throw error;
+        expect(error.code).toBe("EVENT_LOOP_BOUNDS");
+        expect(error.at).toEqual(["fixtures", "actors", 0, "path"]);
+      }
+    }
+  });
+
   test("every invalid fixture fails with its recorded code and bounded span", async () => {
     const corpus = object(await load("corpus.json"), "corpus");
     const fixtures = object(corpus.fixtures, "corpus.fixtures");
     if (!Array.isArray(fixtures.invalid)) throw new Error("invalid fixture group did not parse");
+    const contents = await readCorpusFixtures(corpus);
     for (const raw of fixtures.invalid) {
       const entry = object(raw, "fixture");
       const expected = object(entry.expected, "fixture.expected");
-      const bytes = await readFile(join(ROOT, text(entry.path, "fixture.path", 512)));
+      const bytes = contents.get(path(entry.path, "fixture.path"));
+      if (!bytes) throw new Error("checked fixture bytes missing");
       expect<unknown>(checkEventLoopBytes(bytes), text(entry.id, "fixture.id")).toEqual({
         code: expected.code, span: expected.span,
       });
