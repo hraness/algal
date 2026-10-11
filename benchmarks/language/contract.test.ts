@@ -976,6 +976,11 @@ describe("language benchmark contract fixtures", () => {
       { group: "actors", field: "path", value: "a\0b" },
       { group: "actors", field: "path", value: "a\u007fb" },
       { group: "actors", field: "eventPath", value: "D:/events" },
+      { group: "actors", field: "path", value: "actors/x\ud800.json" },
+      { group: "projects", field: "path", value: "projects/x\udc00.json" },
+      { group: "invalid", field: "path", value: "invalid/x\ud800.json" },
+      { group: "actors", field: "eventPath", value: "actors/x\ud800.events.json" },
+      { group: "actors", field: "eventPath", value: "actors/x\udc00.events.json" },
       { group: "actors", field: "eventPath", value: "a\rb" },
     ] as const;
     for (const { group, field, value } of cases) {
@@ -1501,6 +1506,24 @@ describe("language benchmark contract fixtures", () => {
     }
     expect(errorCode(() => text("é".repeat(64), "profile"))).toBe("ACCEPTED");
     expect(errorCode(() => text("é".repeat(65), "profile"))).toBe("EVENT_LOOP_PARSE");
+  });
+
+  test("corpus regressionPercent accepts 0 and 100, rejects adjacent bounds and malformed values", async () => {
+    const base = await load("corpus.json");
+    for (const value of [0, 100]) {
+      const corpus = structuredClone(base) as RecordValue;
+      object(corpus.protocol, "protocol").regressionPercent = value;
+      corpus.digest = canonicalDigest(withoutDigest(corpus));
+      expect(errorCode(() => parseCorpus(corpus)), `regressionPercent=${value}`).toBe("ACCEPTED");
+    }
+    for (const value of [-1, 101, 0.5, "20", null, true]) {
+      const corpus = structuredClone(base) as RecordValue;
+      object(corpus.protocol, "protocol").regressionPercent = value;
+      expect(errorCode(() => parseCorpus(corpus)), `regressionPercent=${String(value)}`).toBe("EVENT_LOOP_BOUNDS");
+    }
+    const missing = structuredClone(base) as RecordValue;
+    delete object(missing.protocol, "protocol").regressionPercent;
+    expect(errorCode(() => parseCorpus(missing))).toBe("EVENT_LOOP_PARSE");
   });
 
   test("count, byte, and list limits reject their first excess", async () => {

@@ -119,6 +119,38 @@ test("file size, file count, id and path limits reject the first excess", async 
   }
 });
 
+test("lone surrogates cannot alias project paths, but paired Unicode and 512 UTF-8 bytes work", async () => {
+  const data = fixture([source(1)]);
+  for (const valid of ["actor-\u{1f680}.json", "a".repeat(508) + "\u{1f680}"]) {
+    expect(Buffer.byteLength(valid, "utf8")).toBeLessThanOrEqual(512);
+    data.project.entry = valid;
+    data.project.files[0]!.path = valid;
+    rehash(data.project);
+    expect((await verifyProjectClosure(data.project, async (path) => {
+      expect(path).toBe(valid);
+      return source(1);
+    })).byteLength).toBe(1);
+  }
+  expect(Buffer.byteLength("a".repeat(508) + "\u{1f680}", "utf8")).toBe(512);
+
+  for (const invalid of ["actor-\ud800.json", "actor-\udc00.json", "\ud800\ud800", "\udc00\ud800", "a".repeat(509) + "\ud800", "a".repeat(509) + "\u{1f680}"]) {
+    for (const location of ["entry", "file"] as const) {
+      const project = structuredClone(data.project);
+      const at = location === "entry" ? ["entry"] : ["files", 0, "path"];
+      if (location === "entry") project.entry = invalid;
+      else project.files[0]!.path = invalid;
+      let reads = 0;
+      const error = await rejected(project, async () => { reads++; return source(1); });
+      expect(error.code).toBe("EVENT_LOOP_PARSE");
+      expect(error.at).toEqual(at);
+      expect(reads).toBe(0);
+      const encoded = new TextEncoder().encode(JSON.stringify(project));
+      const span = locateJsonSpan(encoded, at);
+      expect(new TextDecoder().decode(encoded.subarray(span.start, span.end))).toBe(JSON.stringify(invalid).slice(1, -1));
+    }
+  }
+});
+
 test("closed project records reject unknown fields, changed bytes and missing files", async () => {
   const data = fixture([source(1)]);
   const wrongContract = { ...data.project, contract: "algal.language-project.v2" };

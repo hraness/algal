@@ -47,8 +47,11 @@ export function isProjectPath(value: unknown): value is string {
     Buffer.byteLength(value, "utf8") <= MAX_PATH_BYTES && !value.startsWith("/") &&
     !value.includes("\\") && !/^[a-zA-Z]:/.test(value) &&
     !Array.from(value).some((char) => {
-      const code = char.charCodeAt(0);
-      return code < 32 || (code >= 127 && code <= 159);
+      // Iterate code points so valid pairs survive while lone UTF-16
+      // surrogates cannot alias replacement-character paths at the file read.
+      const code = char.codePointAt(0)!;
+      return code < 32 || (code >= 127 && code <= 159) ||
+        (code >= 0xd800 && code <= 0xdfff);
     }) &&
     !value.split("/").some((part) => !part || part === "." || part === "..");
 }
