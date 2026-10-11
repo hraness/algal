@@ -42,12 +42,16 @@ function id(value: unknown, at: At): string {
   return value;
 }
 
+function isProjectPath(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 &&
+    Buffer.byteLength(value, "utf8") <= MAX_PATH_BYTES && !value.startsWith("/") &&
+    !value.includes("\\") && !/^[a-zA-Z]:/.test(value) &&
+    !Array.from(value).some((char) => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127) &&
+    !value.split("/").some((part) => !part || part === "." || part === "..");
+}
+
 function path(value: unknown, at: At): string {
-  if (typeof value !== "string" || value.length === 0 ||
-      Buffer.byteLength(value, "utf8") > MAX_PATH_BYTES || value.startsWith("/") ||
-      value.includes("\\") || value.split("/").some((part) => !part || part === "." || part === "..")) {
-    fail("EVENT_LOOP_PARSE", at);
-  }
+  if (!isProjectPath(value)) fail("EVENT_LOOP_PARSE", at);
   return value;
 }
 

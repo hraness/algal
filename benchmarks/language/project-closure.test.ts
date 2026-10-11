@@ -102,9 +102,17 @@ test("file size, file count, id and path limits reject the first excess", async 
     rehash(data.project);
     expect((await verifyProjectClosure(data.project, async () => source(1))).byteLength).toBe(1);
   }
-  for (const path of ["", "a".repeat(513), "é".repeat(257), "../escape", "a\\b"]) {
+  for (const path of ["", "a".repeat(513), "é".repeat(257), "../escape", "a\\b", "C:/escape", "C:escape", "a\0b", "a\nb"]) {
     data.project.entry = path;
     expect((await rejected(data.project, data.read)).code).toBe("EVENT_LOOP_PARSE");
+  }
+  for (const path of ["C:/escape", "a\0b"]) {
+    data.project.entry = "file-0";
+    data.project.files[0]!.path = path;
+    rehash(data.project);
+    const error = await rejected(data.project, async () => { throw new Error("must not read"); });
+    expect(error.code).toBe("EVENT_LOOP_PARSE");
+    expect(error.at).toEqual(["files", 0, "path"]);
   }
 });
 
