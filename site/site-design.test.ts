@@ -40,7 +40,7 @@ test("shared appearance and generated evidence remain progressively discoverable
   for (const theme of ["light", "dark", "system"]) {
     expect(chrome).toContain(`data-theme-value="${theme}"`);
   }
-  for (const placeholder of ["HERO_CHOOSER", "HERO_STAGE", "REPLY_SOURCE"]) {
+  for (const placeholder of ["HERO_RUN", "VM_MEASURE", "REPLY_SOURCE"]) {
     expect(pages["home.html"]).toContain(`{{${placeholder}}}`);
   }
   for (const placeholder of ["ROUTE_PANELS", "INBOX_CHILD_PANELS", "AUTHORING_ERROR", "SOURCE_DIAGNOSTIC"]) {
@@ -135,12 +135,28 @@ test("each Vercel alias host redirects on its own rule", () => {
   for (const rule of config.redirects) expect(rule).toMatchObject({ destination: "https://algal.computer/$1", permanent: true });
 });
 
+test("the home page carries one signature moment, with a static final frame under reduced motion", () => {
+  const home = pages["home.html"]!;
+  expect(home.match(/data-hraness-signature=/gu)?.length).toBe(1);
+  expect(home).toContain('data-hraness-signature="pause-resume"');
+  // The drawing is hidden from assistive technology; its meaning is in the visible caption.
+  expect(home).toContain('<div class="pf-stage" aria-hidden="true">');
+  expect(home).toContain("<figcaption>Pause and resume.");
+  const styles = readFileSync(join(SITE, "styles.css"), "utf8");
+  expect(styles).toContain("@media (prefers-reduced-motion: no-preference) {\n  .pf-step, .pf-mail { animation:");
+  expect(styles).toContain(".pf-step, .pf-mail, .pf-lane--first { animation: none !important; }");
+  expect(styles).toContain(".pf-stage, .pf-step { background: Canvas; color: CanvasText; border-color: CanvasText; }");
+  // The hero proof is the real release-review program and its recorded run.
+  expect(home).toContain("{{HERO_RUN}}");
+  expect(home).toContain("{{VM_MEASURE}}");
+});
+
 test("the home page sets the founder's note directly below the hero in a serif face", () => {
   const home = pages["home.html"]!;
   expect(home.indexOf("hero-title")).toBeLessThan(home.indexOf('class="founder-note"'));
   expect(home.indexOf('class="founder-note"')).toBeLessThan(home.indexOf('id="lisp"'));
-  expect(home).toContain("ALGAL is a programming language for agent programs that outlive a single run.");
-  expect(home).toContain('<a href="https://algal.computer">algal.computer</a>');
+  expect(home).toContain("<p>{{SITE_BLURB}}</p>");
+  expect(home).toContain('{{SITE_BLURB_CTA}}: <a href="{{SITE_BLURB_URL}}">algal.computer</a>');
   const styles = readFileSync(join(SITE, "styles.css"), "utf8");
   const noteRule = styles.slice(styles.indexOf(".founder-note__body p {"));
   expect(noteRule).toContain('"Instrument Serif"');

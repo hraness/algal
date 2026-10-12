@@ -67,21 +67,6 @@ document.querySelectorAll<HTMLElement>("[data-tabset]").forEach(tablist => {
   tablist.hidden = false;
 });
 
-// Hero example chooser: swaps which program's source and recorded run the proof
-// panel shows. Progressive enhancement: the first set is visible without
-// JavaScript.
-document.querySelectorAll<HTMLElement>(".hero-chooser").forEach(chooser => {
-  const stage = chooser.closest("[data-hero-proof]")?.querySelector<HTMLElement>("[data-hero-stage]");
-  const buttons = Array.from(chooser.querySelectorAll<HTMLButtonElement>("[data-hero-choose]"));
-  if (!stage || buttons.length === 0) return;
-  const sets = Array.from(stage.querySelectorAll<HTMLElement>("[data-example-set]"));
-  const selectExample = (key: string) => {
-    for (const set of sets) set.hidden = set.dataset.exampleSet !== key;
-    for (const button of buttons) button.setAttribute("aria-pressed", String(button.dataset.heroChoose === key));
-  };
-  for (const button of buttons) button.addEventListener("click", () => selectExample(button.dataset.heroChoose!));
-});
-
 // Homepage demo tour: tabs over the launch mockups. Without JavaScript the
 // tab list stays hidden and only the first step shows.
 document.querySelectorAll<HTMLElement>("[data-al-tour]").forEach(tour => {
