@@ -10,7 +10,7 @@ updated: 2026-10-05
 
 # Software that accumulates competence
 
-ALGAL bets that a computer can accumulate tested ways of acting, so that doing useful work leaves it with a better, reusable way to do the next piece of work. That is a narrower claim than "AI writes software", which every frontier model can already do in draft form. Treat this as a research hypothesis. This post describes the experiment needed to test it. The [vision page](/docs/vision/) has the full argument.
+ALGAL bets that a computer can accumulate tested ways of acting, so that doing useful work leaves it with a better, reusable way to do the next piece of work. That is a narrower claim than "AI writes software", which every frontier model can already do in draft form. This post describes the experiment that tests it. The [vision page](/docs/vision/) has the full argument.
 
 ## Two ways to think about software
 
@@ -38,7 +38,7 @@ ALGAL is a language and an application VM, not a new processor or an operating s
 
 A population that keeps generating slightly different workflows is an optimizer, and possibly an expensive one. The larger possibility is cumulative construction: a useful method becomes a building block, and the block makes more complex methods easier to discover. A reliable record comparison becomes part of a discrepancy detector, which becomes part of a reconciliation process, which becomes part of monitoring. The question is whether each acquisition lowers the cost of the next.
 
-Generation produces possibilities. Selection filters them. Composition is what could let competence compound. ALGAL has mechanisms for all three. It has not shown that cumulative construction emerges from them, and that gap is where the research lives.
+Generation produces possibilities. Selection filters them. Composition is what could let competence compound. ALGAL has mechanisms for all three, and the experiment below measures whether cumulative construction emerges from them.
 
 ## What would settle it
 

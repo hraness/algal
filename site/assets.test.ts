@@ -25,9 +25,10 @@ test("site CSS references separate hashed fonts with exact shared font bytes", a
     expect(faces.length).toBeGreaterThan(0);
     // Design-kit 0.36.3 includes the shared marketing controls: 605,499 bytes,
     // 90,697 with gzip. Design-kit 0.41.0 adds the product-landscape ruleset:
-    // 640,999 bytes, 94,791 with gzip. Allow 640 KiB raw; retain the 96 KiB
-    // transport guard.
-    expect(Buffer.byteLength(css)).toBeLessThan(655_360);
+    // 640,999 bytes, 94,791 with gzip. The home page's recorded run, pause and
+    // resume figure, mechanism, and measurement styles add 16,601 bytes:
+    // 657,600. Allow 672 KiB raw; retain the 96 KiB transport guard.
+    expect(Buffer.byteLength(css)).toBeLessThan(688_128);
     expect(gzipSync(css).byteLength).toBeLessThan(98_304);
     const references = new Set<string>();
     const hashes = new Set<string>();

@@ -49,8 +49,8 @@ An ALGAL wait has no plan ceiling because there is no plan. The suspension is a 
 - A program should get only the permissions you grant: capabilities from the host, budgets on cells, and no way to create permissions from data.
 - You want waits with no platform ceiling and no per-step meter: a binary and a store you own.
 
-## Status and limits
+## When to choose which
 
-ALGAL is a prerelease application VM: unsigned packages, local stores, and no hosted service, so you operate it yourself. Inngest is a production platform with documented limits and published pricing. If you need managed durable execution today, use Inngest. To see an agent program written as data, [take the tour](/tour/) or [read the spec](/docs/spec/organism/).
+ALGAL runs as one binary with local stores; you operate it yourself, or run programs as habitats on [algal.cloud](https://algal.cloud). Inngest is a production platform with documented limits and published pricing. If you need managed durable execution today, use Inngest. To see an agent program written as data, [take the tour](/tour/) or [read the spec](/docs/spec/organism/).
 
 *Sources: [Inngest pricing](https://inngest.com/pricing), [Inngest steps](https://www.inngest.com/docs/learn/inngest-steps), the [usage limits reference](https://www.inngest.com/docs/usage-limits/inngest), and [self-hosting](https://www.inngest.com/docs/self-hosting), checked 2026-09-26.*

@@ -1,22 +1,22 @@
-# Native prerelease distribution
+# Install the native CLI
 
-The native process VM can run without Bun, Cargo, or a repository checkout.
-Binary packages are tested on three targets:
+The native `algal` CLI runs without Bun, Cargo, or a repository checkout.
+Binary packages are built and tested on three targets:
 
-| Archive target | Supported qualification environment |
+| Archive target | Tested on |
 | --- | --- |
 | `x86_64-unknown-linux-gnu` | Ubuntu 24.04 x86_64, glibc 2.39 or newer |
 | `aarch64-unknown-linux-gnu` | Ubuntu 24.04 arm64, glibc 2.39 or newer (from `v0.2.0-vm.11`) |
 | `aarch64-apple-darwin` | macOS 14 or newer on Apple silicon |
 
-These are prerelease targets. Other Linux architectures, older glibc systems,
-Intel Macs, and Windows do not yet have equivalent package qualification.
+Status: ALGAL ships as a prerelease on these three targets; other Linux
+architectures, older glibc systems, Intel Macs, and Windows are not packaged.
 The Apple Foundation Models bridge is a separate optional build requiring
 compatible macOS/Xcode; it is not part of the portable CLI package.
 
 ## Install with one command
 
-On a supported target, this downloads the current prerelease for your
+On a supported target, this downloads the current release for your
 platform from GitHub Releases and installs `~/.local/bin/algal`:
 
 ```sh

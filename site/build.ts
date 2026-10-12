@@ -576,11 +576,12 @@ const pages: { file: string; out: string; meta: SitePageMeta }[] = [
 // repo and are not mirrored.
 
 const DOC_GROUPS: { title: string; pages: string[] }[] = [
-  { title: "Start here", pages: ["native-release", "native-workbench", "source-language", "scaling-programs", "library", "scale-measurements", "vm"] },
-  { title: "Vision", pages: ["vision", "lineage", "why-unique"] },
-  { title: "Concepts", pages: ["algal-design", "design", "agent-loop-and-organism", "programmable-applications", "application-host-adapters", "executors", "model-router", "diagrams", "repair", "program-database"] },
-  { title: "Life and selection", pages: ["habitats", "civilization", "cumulative-skill-experiment"] },
-  { title: "Applications and workflows", pages: ["use-cases", "when-algal-wins", "browser-grow", "browser-tasks", "browser-inference", "malleable-site", "malleable-workbench", "local-triage", "adaptive-inventory", "agent-tool", "coding-harness", "coding-operations", "pr-shepherd"] },
+  { title: "Learn the language", pages: ["source-language", "scaling-programs", "library", "diagrams"] },
+  { title: "Run a program", pages: ["native-release", "native-workbench", "vm", "executors", "model-router", "use-cases", "agent-tool"] },
+  { title: "Pause, resume, and replay", pages: ["repair", "coding-operations", "pr-shepherd", "scale-measurements"] },
+  { title: "Evolve programs", pages: ["task-optimization", "habitats", "civilization", "program-database"] },
+  { title: "Why ALGAL", pages: ["vision", "lineage", "why-unique", "when-algal-wins", "algal-design", "agent-loop-and-organism", "design"] },
+  { title: "Applications", pages: ["programmable-applications", "application-host-adapters", "adaptive-inventory", "browser-grow", "browser-tasks", "browser-inference", "malleable-site", "malleable-workbench", "local-triage"] },
 ];
 const DOC_SLUGS = DOC_GROUPS.flatMap(group => group.pages);
 const SPEC_SLUGS = ["organism", "expr", "foundry", "search", "bench", "mailbox", "process", "process-evidence", "process-journal", "application", "coding-job", "coding-job-v2", "coding-operation", "replay", "vendor"];
@@ -916,9 +917,9 @@ const indexSpec = `<section class="docs-index-group"><h2>Specification</h2><ul c
 await emitDocPage({
   page: "docs", path: "/docs/",
   title: "ALGAL documentation",
-  description: "Install and run the ALGAL VM, write programs in .algal source, and read the v1 contract specification. These pages render the repository's own Markdown.",
+  description: "Learn the ALGAL language, run a program, pause and resume it, replay a run, and evolve programs. The pages render the repository's own Markdown and the v1 specification.",
   ogTitle: "ALGAL documentation",
-}, `<section class="page-intro"><p class="eyebrow">Documentation</p><h1>The reference shelf.</h1><p class="lede">Install the VM, write programs in <code>.algal</code> source, and read the v1 specification. Each page renders the Markdown in the repository's <code>docs/</code> and <code>spec/v1/</code> folders; dated reviews, pilot results, and research notes stay on GitHub.</p></section><div class="docs-layout">${docsRail("index", docTitles)}<div class="docs-article docs-index"><div class="docs-index-groups">${indexGroups}${indexSpec}</div></div></div>`);
+}, `<section class="page-intro"><p class="eyebrow">Documentation</p><h1>Pick the page by the job.</h1><p class="lede">Learn the language, run a program, pause and resume it, replay a run, or evolve a program into a better one. Each page renders the Markdown in the repository's <code>docs/</code> and <code>spec/v1/</code> folders, and the specification sits at the end.</p></section><div class="docs-layout">${docsRail("index", docTitles)}<div class="docs-article docs-index"><div class="docs-index-groups">${indexGroups}${indexSpec}</div></div></div>`);
 
 // --- Authored content: blog posts and comparison pages ---------------------
 // Same renderer as the docs mirror, but these pages are site-native: they

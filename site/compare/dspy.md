@@ -46,8 +46,8 @@ The two could also work together. A DSPy-style optimizer could propose the conte
 - Only a program the host accepted after measurement should be promoted, with its lineage recorded. See [habitats and civilization](/docs/habitats/).
 - You want the search to run where the program runs, including with an on-device model of about 3B parameters, rather than as a separate compile step.
 
-## Status and limits
+## When to choose which
 
-ALGAL's evolution loop is young. It runs measured program search end to end with the host choosing the winner, and [the civilization doc](/docs/civilization/) describes how an epoch runs and what its receipts record. It is not yet the optimization workhorse DSPy is. If your problem is prompt quality on a fixed pipeline, use DSPy. ALGAL exists to test whether programs can safely propose and select their own successors.
+ALGAL runs measured program search end to end with the host choosing the winner, and [the civilization doc](/docs/civilization/) describes how an epoch runs and what its receipts record. DSPy is the optimization workhorse for prompt quality on a fixed pipeline; if that is your problem, use DSPy. Use ALGAL when the programs themselves should propose and select their successors, with every run recorded and replayable.
 
 *Sources: the [DSPy paper](https://proceedings.iclr.cc/paper_files/paper/2024/file/f1cf02ce09757f57c3b93c0db83181e0-Paper-Conference.pdf) (ICLR 2024) and the [DSPy README](https://github.com/stanfordnlp/dspy), checked 2026-09-26.*

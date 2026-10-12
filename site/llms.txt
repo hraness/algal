@@ -2,16 +2,16 @@
 
 {{SITE_DESCRIPTION}}
 
-Agent programs today are scripts: they run start to finish and leave a log. ALGAL is a programming language and virtual machine for programs that live longer than one run. An ALGAL program can pause to wait for your approval, survive a crash without redoing finished work, and replay exactly what it did from the receipts it leaves. The VM is previewing now, and the language toolchain ships with it. ALGAL is free and open source.
+ALGAL is a programming language for agents that run for weeks. An ALGAL program is data: a typed graph of steps, model calls, and tools that a host can inspect, hash, and run. A program can pause for an approval, exit, and resume days later on another machine without repeating the work it already did. Every model call and tool result is recorded, so a run can be replayed and checked offline. Programs evolve: ALGAL proposes a candidate, evaluates it against the current version, and adopts the one that scores better. It ships with TypeScript and Rust runtimes that share the same program and record formats. ALGAL is free and open source under the MIT license.
 
-ALGAL is prerelease software. Unsigned native builds for macOS on Apple silicon and Linux x86_64 and arm64 are published as GitHub prereleases; `curl -fsSL https://algal.computer/install.sh | sh` installs one into ~/.local/bin.
+Install the native CLI on macOS (Apple silicon) or Linux (x86_64 and arm64) with `curl -fsSL https://algal.computer/install.sh | sh`; it installs the current GitHub release into ~/.local/bin.
 
 ## Pages
 
-- [Write agent programs that wait, resume, and replay](https://algal.computer/): what an ALGAL program can do, the source language, the habitat it runs in, receipts, and how programs propose new programs
+- [Write agent programs that outlive the process](https://algal.computer/): a recorded pause-and-resume run, who ALGAL is for, what a program does, how the host runtime records and replays it, and how programs evolve
 - [Inside a living program](https://algal.computer/tour/): the guided tour, with recorded runs, interactive diagrams you can replay, source diagnostics, and composition examples
-- [Put living programs to work](https://algal.computer/use-cases/): change review, checked coding repairs, portable run histories, reusable routing, and current limits
-- [Documentation index](https://algal.computer/docs/): the repository docs rendered for the web, covering install, the source language, the process VM, habitats, civilization, and executors
+- [Put living programs to work](https://algal.computer/use-cases/): change review, checked coding repairs, portable run histories, reusable routing, and what your host application owns
+- [Documentation index](https://algal.computer/docs/): the repository docs rendered for the web, grouped by job: learn the language, run a program, pause and resume, replay, and evolve programs
 - [Notes on living programs](https://algal.computer/blog/): longer posts on how the language works, how it is tested, and the design choices behind it
 - [Comparisons](https://algal.computer/compare/): how ALGAL compares with LangGraph, BAML, DSPy, Temporal, Restate, and Inngest
 
@@ -52,10 +52,10 @@ ALGAL is prerelease software. Unsigned native builds for macOS on Apple silicon 
 
 ## Documentation
 
-The documentation below renders the repository's own `docs/` and `spec/v1/` Markdown files. Dated reviews, pilot results, and research notes stay in the repository.
+The documentation below renders the repository's own `docs/` and `spec/v1/` Markdown files.
 
 - [Repository](https://github.com/hraness/algal)
-- [Native VM and release artifacts](https://algal.computer/docs/native-release/)
+- [Install the native CLI](https://algal.computer/docs/native-release/): supported targets, the installer's checks, updates, and manual verification
 - [Try the native VM](https://algal.computer/docs/native-workbench/): leave a program waiting for your approval, approve it in a later command, and run its crash tests; a built-in fixture stands in for the model
 - [The ALGAL process VM](https://algal.computer/docs/vm/)
 - [Readable source language](https://algal.computer/docs/source-language/)

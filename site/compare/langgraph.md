@@ -55,8 +55,8 @@ The [interactive diagrams on this site](/tour/) replay recorded event order for 
 - Agent programs need enforced permissions: typed capabilities, budgets, and a host that decides what a program may use.
 - You want programs that propose their successors, measured on declared cases, with the lineage recorded on the receipt. [Habitats and selection](/docs/habitats/) describe how.
 
-## Status and limits
+## When to choose which
 
-ALGAL is a prerelease application VM. Packages are unsigned and not notarized, the ecosystem is young, and there is no managed platform, so you run the binary yourself. LangGraph is a mature framework with a company and a cloud behind it; if you need that today, use it. To see an agent program written as data, [take the tour](/tour/) or [read the spec](/docs/spec/organism/).
+ALGAL runs as one binary with local stores; you operate it yourself, or run programs as habitats on [algal.cloud](https://algal.cloud). LangGraph is a mature framework with a company and a cloud behind it; if you need that ecosystem today, use it. To see an agent program written as data, [take the tour](/tour/) or [read the spec](/docs/spec/organism/).
 
 *Sources: the [LangGraph overview for Python](https://docs.langchain.com/oss/python/langgraph/overview) and [for JavaScript](https://docs.langchain.com/oss/javascript/langgraph/overview), and Temporal's [LangGraph plugin announcement](https://temporal.io/blog/temporal-langgraph-plugin-durable-execution) (July 16, 2026), checked 2026-09-26.*
