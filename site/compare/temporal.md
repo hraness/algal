@@ -53,8 +53,8 @@ In ALGAL, a wait is a capability the manifest declares. A wait-style cell suspen
 - A host or another program needs to inspect or generate the program itself, so it has to be data with a content address that can be diffed and spawned.
 - You want durable waits without running an orchestration service: one binary, a store, and a receipt.
 
-## Status and limits
+## When to choose which
 
-Temporal is mature, funded, and runs production fleets. ALGAL is a prerelease application VM: one binary, local stores, unsigned packages, and no hosted service, so you operate it yourself. If you need production orchestration today, use Temporal. Temporal also argues that agent frameworks still need an orchestrator underneath, and ships a [LangGraph plugin](https://temporal.io/blog/temporal-langgraph-plugin-durable-execution) for that. To see ALGAL programs and their recorded runs, [take the tour](/tour/).
+Temporal is mature, funded, and runs production fleets. ALGAL runs as one binary with local stores; you operate it yourself, or run programs as habitats on [algal.cloud](https://algal.cloud). If you need production orchestration today, use Temporal. Temporal also argues that agent frameworks still need an orchestrator underneath, and ships a [LangGraph plugin](https://temporal.io/blog/temporal-langgraph-plugin-durable-execution) for that. To see ALGAL programs and their recorded runs, [take the tour](/tour/).
 
 *Sources: [Temporal event history](https://docs.temporal.io/workflow-execution/event), [Temporal workflow message passing](https://docs.temporal.io/encyclopedia/workflow-message-passing), and the [Temporal LangGraph plugin announcement](https://temporal.io/blog/temporal-langgraph-plugin-durable-execution) (July 16, 2026), checked 2026-09-26.*

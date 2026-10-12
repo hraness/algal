@@ -1,0 +1,73 @@
+{
+  "contract": "algal.vm-demo.v1",
+  "ok": true,
+  "fixture": "scripted local command adapter; no paid model calls, token or dollar claims",
+  "scenario": "Release report proposal, process exit, external approval, selective resume, publication",
+  "runtimes": [
+    "typescript"
+  ],
+  "crossRuntimeHandoffs": 0,
+  "process": {
+    "actors": 2,
+    "decisionInvocations": 2,
+    "resumedDecisionInvocations": 0,
+    "idleSchedulerTicks": 0,
+    "idleDecisionInvocations": 0,
+    "duplicateWakeDeliveriesSuppressed": 2,
+    "offlineVerifiedReceipts": 4,
+    "verificationDecisionInvocations": 0
+  },
+  "baseline": {
+    "description": "Same manifest and evidence, checkpoint discarded before restart; idempotent mailbox driver retained",
+    "decisionInvocations": 4
+  },
+  "avoidedDecisionInvocations": 2,
+  "avoidedDecisionFraction": 0.5,
+  "actors": [
+    {
+      "name": "alpha",
+      "status": "complete",
+      "generations": 2,
+      "proposals": 1,
+      "publications": 1,
+      "receipt": "sha256:d473c017ca844d9983c8c4499d7d90702000517e74573308524118b9fb4d31f0",
+      "head": "sha256:9d5563ba209417c4e49f92af576628ef85004241ea893e91be2e4c6163edea1b",
+      "verifiedReceipts": 2,
+      "publication": {
+        "action": "publish_release_report",
+        "decision": "approve",
+        "release": "release-42"
+      }
+    },
+    {
+      "name": "beta",
+      "status": "complete",
+      "generations": 2,
+      "proposals": 1,
+      "publications": 0,
+      "receipt": "sha256:80b343a91a7e366ee37c364489ab2752d007ddcb96aa519a2c6a931455da392b",
+      "head": "sha256:e413b57bb9e9a91f09d53e32687cb07e51b80b06c86d45bfe9279edfe4f6f360",
+      "verifiedReceipts": 2,
+      "publication": null
+    }
+  ],
+  "sameArgsIndependence": {
+    "actors": 2,
+    "identicalArgs": true,
+    "crossRuntime": false,
+    "distinctProposalDeliveries": 2,
+    "sharedWakeSchedulerTicks": 1,
+    "completed": 1,
+    "suspended": 1,
+    "decisionInvocations": 2
+  },
+  "cliInvocations": 73,
+  "limitations": [
+    "Fixture demonstrates execution behavior, not live model judgment or paid cost savings.",
+    "Actors share the manifest and evidence but have separate host-admitted mailbox capabilities.",
+    "Host filesystem and command adapters are trusted; this is not OS isolation.",
+    "Uncertain effects require reconciliation; arbitrary external effects are not exactly once."
+  ],
+  "capturedOn": "2026-10-13",
+  "command": "bun scripts/vm-demo.ts --keep --out vm-report.json"
+}

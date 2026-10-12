@@ -53,8 +53,8 @@ In ALGAL, a wait is a capability the manifest declares. A wait-style cell suspen
 - The program itself needs to be inspected or generated: content-addressed, diffable, and emitted by `spawn`, so a host or another program can read or write it.
 - You want durable waits without running any service: one binary, a store, and a receipt.
 
-## Status and limits
+## When to choose which
 
-ALGAL is a prerelease application VM: unsigned packages, local stores, and no hosted service, so you operate it yourself. Restate is source-available infrastructure (Business Source License 1.1) with a cloud, a BYOC option, and production deployments. If you need durable execution in production today, use Restate. To see agent programs you can inspect and verify, [take the tour](/tour/).
+ALGAL runs as one binary with local stores; you operate it yourself, or run programs as habitats on [algal.cloud](https://algal.cloud). Restate is source-available infrastructure (Business Source License 1.1) with a cloud, a BYOC option, and production deployments. If you need durable execution in production today, use Restate. To see agent programs you can inspect and verify, [take the tour](/tour/).
 
 *Sources: [Restate vs Temporal](https://restate.dev/vs/temporal) and the [self-hosted Restate overview](https://docs.restate.dev/server/overview), checked 2026-09-26.*

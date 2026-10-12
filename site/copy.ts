@@ -17,7 +17,7 @@ export function serializeMarketingJson(value: string): string {
 }
 
 /** Where ALGAL runs, shown once on the home page and once on the use-cases page. */
-export const ADOPTION_BOUNDARY = `<p>ALGAL runs approval queues, coding repairs checked by your own tests, reusable judgment pipelines, and run histories you inspect later. Run it as one native binary on your machine, or as a habitat on algal.cloud that keeps your programs alive across restarts, machines, and teams.</p><p>Your application supplies tool permissions, models, and limits. A program declares its decisions, budgets, and approval points, and cannot widen its own authority. Receipts record every step, so a reviewer can replay a run without your store, your credentials, or a model.</p>`;
+export const ADOPTION_BOUNDARY = `<p>ALGAL runs approval queues, coding repairs checked by your own tests, reusable judgment pipelines, and run histories you inspect later. Run it as one native binary on your machine, or as a habitat on algal.cloud that keeps your programs alive across restarts, machines, and teams.</p><p>Your application supplies tool permissions, models, and limits. A program declares its decisions, budgets, and approval points, and cannot widen its own permissions. Receipts record every step, so a reviewer can replay a run without your store, your credentials, or a model.</p>`;
 
 /** The first-run terminal, shown on the home and use-cases install sections. */
 const installCommands = highlightCode(`# Check the installed build and available model providers

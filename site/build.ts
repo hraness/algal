@@ -23,7 +23,6 @@ import { verifyReceipt } from "../src/verify";
 import { renderIconSprite, siteIcon } from "./icons";
 import { buildSiteStyles } from "./assets";
 import { renderStatusPageHtml } from "@hraness/design-kit";
-import { highlightCode } from "@hraness/design-kit/syntax-highlighting";
 import { pageDocument, type SitePageMeta } from "./chrome";
 import { ADOPTION_BOUNDARY, CIVILIZATION_EXAMPLE, INSTALL_TERMINAL, SITE_DESCRIPTION, SITE_NAME, productMessaging } from "./copy";
 import { renderInstallScript } from "./install-script";
@@ -358,91 +357,100 @@ for (const name of ["refine", "swarm", "habitat"] as const) {
   evolutionRuns.set(name, receipt);
 }
 
-// --- Hero proof panel -------------------------------------------------------
-// The hero leads with the language itself. A chooser steps through example
-// programs; each selection shows the source (or manifest excerpt) beside the
-// facts of one recorded, replay-checked run. The graphs stay one link away.
-const heroReceiptCard = (manifest: OrganismManifest, receipt: RunReceipt) => {
-  const outputs = Object.entries(manifest.interface?.outputs ?? {}).map(([name, endpoint]) => {
-    const value = receipt.cells[endpoint.cell]?.outputs?.[endpoint.port];
-    if (value === undefined) throw new Error(`Hero example is missing its ${name} output`);
-    return [name, value] as const;
-  });
-  if (outputs.length === 0) throw new Error("Hero examples need an output to show");
-  const result = outputs.length === 1 ? outputs[0]![1] : Object.fromEntries(outputs);
-  const text = typeof result === "string" ? result : JSON.stringify(result, null, 2);
-  if (Buffer.byteLength(text, "utf8") > 4096) throw new Error("Hero example output exceeds 4 KiB");
-  const output = highlightCode(text, typeof result === "string" ? "text" : "json", { styles: "classes" });
-  return {
-    output,
-    evidenceRows: [
-      ["model calls", `${receipt.work.agentCalls}`],
-      ["result", receipt.outcome],
-    ] as [string, string][],
-  };
-};
-
-const habitatManifest = manifests.get("habitat")!;
 const habitatReceipt = evolutionRuns.get("habitat")!;
-const habitatManifestExcerpt = JSON.stringify(manifestToJson(habitatManifest), null, 2).split("\n").slice(0, 20).join("\n");
 
-interface HeroExample {
-  key: string; file: string; blurb: string;
-  graphHref: string; sourceHref: string; evidenceHref: string;
-  codeName: string; codeHtml: string; codeLanguage: "algal" | "json";
-  output: ReturnType<typeof highlightCode>; evidenceRows: [string, string][];
+// --- Hero proof -------------------------------------------------------------
+// The hero shows one real program beside the transcript of one real run.
+// scripts/vm-demo.ts starts examples/vm/release-review.algal.json, lets it
+// wait for an approval, ends the process, wakes it from a fresh process with
+// a mailbox message, and verifies the receipts offline. Every CLI call in
+// that script is its own OS process. site/launch/vm-demo-report.json is the
+// report the script wrote on 2026-10-13; every number below is read from it.
+const releaseReviewPath = join(ROOT, "examples/vm/release-review.algal.json");
+const releaseReview = asObject(JSON.parse(await readFile(releaseReviewPath, "utf8")) as unknown, "release-review manifest");
+const vmReport = asObject(JSON.parse(await readFile(join(SITE, "launch/vm-demo-report.json"), "utf8")) as unknown, "vm demo report");
+if (vmReport.ok !== true) throw new Error("The VM demo report must come from a run that passed");
+const vmProcess = asObject(vmReport.process, "vm report process");
+const vmBaseline = asObject(vmReport.baseline, "vm report baseline");
+const vmActors = (vmReport.actors as JsonObject[]).map(actor => asObject(actor, "vm actor"));
+const vmAlpha = vmActors.find(actor => actor.name === "alpha");
+if (!vmAlpha || vmAlpha.status !== "complete" || vmAlpha.generations !== 2 || vmAlpha.publications !== 1) {
+  throw new Error("The VM demo report no longer shows the approved actor completing on generation two");
 }
-
-const routeHelp = routeRuns.find(run => run.choice === "help")!;
-
-const heroExamples: HeroExample[] = [
-  {
-    key: "route", file: "route.algal", blurb: "one decision picks one of three branches",
-    graphHref: "/diagrams/route-help.svg",
-    sourceHref: "/examples/route.algal", evidenceHref: "/receipts/route-help.receipt.json",
-    codeName: "route.algal", codeHtml: highlightAlgal(routeSource.trimEnd()), codeLanguage: "algal",
-    ...heroReceiptCard(route.manifest, routeHelp.receipt),
-  },
-  {
-    key: "reply", file: "reply.algal", blurb: "classify the email, then draft",
-    graphHref: "/diagrams/reply-run.svg",
-    sourceHref: "/examples/reply.algal", evidenceHref: "/receipts/reply.receipt.json",
-    codeName: "reply.algal", codeHtml: highlightAlgal(replySource.trimEnd()), codeLanguage: "algal",
-    ...heroReceiptCard(reply.manifest, replyReceipt),
-  },
-  {
-    key: "inbox", file: "inbox.algal", blurb: "reuse one helper across an inbox",
-    graphHref: "/diagrams/inbox.svg",
-    sourceHref: "/examples/projects/inbox/inbox.algal", evidenceHref: "/receipts/inbox.receipt.json",
-    codeName: "inbox.algal", codeHtml: highlightAlgal(inbox.source.trimEnd()), codeLanguage: "algal",
-    ...heroReceiptCard(inbox.manifest, fullInbox.receipt),
-  },
-  {
-    key: "habitat", file: "habitat.algal.json", blurb: "a program writes and runs a program",
-    graphHref: "/diagrams/habitat.svg",
-    sourceHref: "/examples/habitat.algal.json", evidenceHref: "/receipts/habitat.receipt.json",
-    codeName: "habitat.algal.json · first 20 lines of the manifest", codeHtml: highlightCode(habitatManifestExcerpt, "json", { styles: "classes" }).html, codeLanguage: "json",
-    ...heroReceiptCard(habitatManifest, habitatReceipt),
-  },
-];
-
-const HERO_CHOOSER = `<div class="hero-chooser" role="group" aria-label="Choose an example program">${heroExamples.map((example, index) =>
-  `<button type="button" class="hero-choose" data-hero-choose="${example.key}" aria-pressed="${index === 0}"><span class="hc-file">${escapeHtml(example.file).replaceAll(".", "<wbr>.")}</span><span class="hc-blurb">${escapeHtml(example.blurb)}</span></button>`).join("")}</div>`;
+const vmNumber = (value: unknown, label: string): number => {
+  if (typeof value !== "number" || !Number.isFinite(value)) throw new Error(`vm report ${label} is not a number`);
+  return value;
+};
+const VM_DECISIONS = vmNumber(vmProcess.decisionInvocations, "decisionInvocations");
+const VM_RESUMED_DECISIONS = vmNumber(vmProcess.resumedDecisionInvocations, "resumedDecisionInvocations");
+const VM_BASELINE_DECISIONS = vmNumber(vmBaseline.decisionInvocations, "baseline decisionInvocations");
+const VM_VERIFIED_RECEIPTS = vmNumber(vmProcess.offlineVerifiedReceipts, "offlineVerifiedReceipts");
+const VM_VERIFY_DECISIONS = vmNumber(vmProcess.verificationDecisionInvocations, "verificationDecisionInvocations");
+const VM_CLI_PROCESSES = vmNumber(vmReport.cliInvocations, "cliInvocations");
+const VM_DUPLICATE_WAKES = vmNumber(vmProcess.duplicateWakeDeliveriesSuppressed, "duplicateWakeDeliveriesSuppressed");
 
 const heroIcon = (name: "arrow-up-right" | "download") => `<svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#${name}"></use></svg>`;
-const HERO_STAGE = `<div class="hero-stage" data-hero-stage>${heroExamples.map((example, index) => `
-  <div class="hs-set" data-example-set="${example.key}"${index === 0 ? "" : " hidden"}>
-    <figure class="hs-code">
-      <figcaption class="hs-bar"><span class="file-label">${escapeHtml(example.codeName)}</span><a href="${example.sourceHref}" download>Source ${heroIcon("download")}</a></figcaption>
-      <pre class="hs-pre" tabindex="0" aria-label="${escapeHtml(example.file)} source"><code class="syntax-code language-${example.codeLanguage}" data-language="${example.codeLanguage}">${example.codeHtml}</code></pre>
-    </figure>
-    <figure class="hs-evidence">
-      <figcaption class="hs-bar"><span class="file-label">Result · scripted model answers</span></figcaption>
-      <pre class="hs-output" tabindex="0"><code class="${example.output.className}" data-language="${example.output.language}">${example.output.html}</code></pre>
-      <dl class="hs-dl">${example.evidenceRows.map(([k, v]) => `<div><dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd></div>`).join("")}</dl>
-      <p class="hs-links"><a href="${example.evidenceHref}" download>Run record ${heroIcon("download")}</a><a href="${example.graphHref}" target="_blank" rel="noopener">Program graph ${heroIcon("arrow-up-right")}</a></p>
-    </figure>
-  </div>`).join("")}</div>`;
+
+const releaseReviewCells = (releaseReview.cells as JsonObject[]).map(cell => asObject(cell, "release-review cell"));
+const releaseReviewEdges = (releaseReview.edges as JsonObject[]).map(edge => asObject(edge, "release-review edge"));
+function cellNote(cell: JsonObject): string {
+  const id = String(cell.id);
+  const guarded = releaseReviewEdges.find(edge => asObject(edge.to, "edge target").cell === id && edge.guard !== undefined);
+  const guard = guarded ? asObject(guarded.guard, "edge guard") : undefined;
+  switch (cell.kind) {
+    case "input": return `receives ${Object.keys(asObject(cell.outputs, "input outputs")).join(", ")}`;
+    case "agent": return `model call: ${String(cell.prompt)}`;
+    case "tool": return guard ? `${String(cell.tool)}, only when ${String(guard.field)} is ${String(guard.equals)}` : String(cell.tool);
+    case "organism": return "child program that waits on the approvals mailbox";
+    case "expr": return "pure check: the approval names this release and says approve";
+    default: throw new Error(`release-review has an unexpected cell kind ${String(cell.kind)}`);
+  }
+}
+const HERO_PROGRAM = `<figure class="hr-program">
+  <figcaption class="hs-bar"><span class="file-label">examples/vm/release-review.algal.json</span><a href="/examples/release-review.algal.json" download>Source ${heroIcon("download")}</a></figcaption>
+  <ol class="hr-steps" aria-label="The cells of release-review.algal.json">${releaseReviewCells.map(cell =>
+    `<li><span class="hr-kind" data-kind="${escapeHtml(String(cell.kind))}">${escapeHtml(String(cell.kind))}</span><code class="hr-id">${escapeHtml(String(cell.id))}</code><span class="hr-note">${escapeHtml(cellNote(cell))}</span></li>`).join("")}</ol>
+  <p class="hr-facts"><span><b>${releaseReviewCells.length}</b> cells</span><span><b>${releaseReviewCells.filter(cell => cell.kind === "agent").length}</b> model call</span><span><b>1</b> wait</span><span>budget <b>${String(asObject(releaseReview.budgets, "budgets").maxAgentCalls)}</b> model call</span></p>
+</figure>`;
+
+const transcript = (lines: { kind: "cmd" | "out" | "note"; text: string }[]) =>
+  lines.map(line => `<span class="hr-line hr-${line.kind}">${line.kind === "cmd" ? `<span class="hr-prompt" aria-hidden="true">$ </span>` : ""}${escapeHtml(line.text)}</span>`).join("\n");
+const HERO_TRANSCRIPT = `<figure class="hr-run">
+  <figcaption class="hs-bar"><span class="file-label">One run · ${VM_CLI_PROCESSES} fresh processes</span><a href="/docs/vm/">The process VM ${heroIcon("arrow-up-right")}</a></figcaption>
+  <pre class="hr-pre" tabindex="0" aria-label="Transcript of the release-review run"><code>${transcript([
+    { kind: "cmd", text: "algal process create alpha release-review.algal.json --args alpha.args.json --dir ./store" },
+    { kind: "out", text: "status: ready        generation: 0" },
+    { kind: "cmd", text: "algal process tick alpha --dir ./store" },
+    { kind: "out", text: "status: suspended    generation: 1     proposal sent, waiting for approval" },
+    { kind: "note", text: "The process ends. Nothing stays running." },
+    { kind: "cmd", text: "algal mailbox send $APPROVALS approve.json --idempotency-key $KEY --dir ./store" },
+    { kind: "out", text: "delivered           sent twice, delivered once" },
+    { kind: "cmd", text: "algal process schedule --max-ticks 8 --dir ./store" },
+    { kind: "out", text: "ticks: 1            resumed from the recorded prefix" },
+    { kind: "cmd", text: "algal process inspect alpha --dir ./store" },
+    { kind: "out", text: "status: complete     generation: 2     publications: 1" },
+    { kind: "cmd", text: "algal process verify alpha --dir ./store" },
+    { kind: "out", text: `ok: true             receipts: ${String(vmAlpha.verifiedReceipts)}     model calls: ${VM_VERIFY_DECISIONS}` },
+  ])}</code></pre>
+  <dl class="hs-dl">
+    <div><dt>Decisions the model made</dt><dd>${VM_DECISIONS} across ${vmActors.length} programs</dd></div>
+    <div><dt>Decisions repeated after resume</dt><dd>${VM_RESUMED_DECISIONS}</dd></div>
+    <div><dt>Receipts verified offline</dt><dd>${VM_VERIFIED_RECEIPTS}</dd></div>
+  </dl>
+  <p class="hs-links"><a href="/launch/vm-demo-report.json" download>Run report ${heroIcon("download")}</a><a href="https://github.com/hraness/algal/blob/main/scripts/vm-demo.ts" target="_blank" rel="noopener">The script ${heroIcon("arrow-up-right")}</a></p>
+</figure>`;
+const HERO_RUN = `<div class="hero-run">${HERO_PROGRAM}${HERO_TRANSCRIPT}</div>`;
+
+// The measurement figure: the same program, with and without its checkpoint.
+const measureBar = (label: string, value: number, max: number, note: string) =>
+  `<li><span class="vm-measure__label">${escapeHtml(label)}</span><span class="vm-measure__bar" aria-hidden="true"><span style="inline-size:${Math.round((value / max) * 100)}%"></span></span><span class="vm-measure__value"><b>${value}</b> ${escapeHtml(note)}</span></li>`;
+const VM_MEASURE = `<figure class="vm-measure">
+  <ol class="vm-measure__bars" aria-label="Decisions made by the release-review program, with and without its checkpoint">
+    ${measureBar("ALGAL, resumed from the recorded prefix", VM_DECISIONS, VM_BASELINE_DECISIONS, "decisions")}
+    ${measureBar("Same program, restarted from the top", VM_BASELINE_DECISIONS, VM_BASELINE_DECISIONS, "decisions")}
+  </ol>
+  <figcaption>Two copies of <code>release-review.algal.json</code> each wait for an approval, exit, and resume in a new process. The checkpoint keeps the recorded decision, so the resumed run makes ${VM_RESUMED_DECISIONS} new ones. A duplicate approval is delivered once (${VM_DUPLICATE_WAKES} duplicates dropped), and ${VM_VERIFIED_RECEIPTS} receipts verify offline with ${VM_VERIFY_DECISIONS} model calls. Measured by <code>bun scripts/vm-demo.ts</code> in this repository, where a scripted adapter answers the decision step.</figcaption>
+</figure>`;
 
 // Presentation keeps the site's line break and emphasis without copying words.
 function marketingHeading(heading: string, breakAfter: number): string {
@@ -456,9 +464,12 @@ const headingBreaks: Record<string, number> = {
 };
 
 const replacements: Record<string, string> = {
-  HERO_CHOOSER: HERO_CHOOSER,
+  HERO_RUN,
+  VM_MEASURE,
   HOME_TOUR: homeTourHtml(),
-  HERO_STAGE: HERO_STAGE,
+  SITE_BLURB: escapeHtml(productMessaging.blurb.text),
+  SITE_BLURB_CTA: escapeHtml(productMessaging.blurb.cta.label),
+  SITE_BLURB_URL: escapeHtml(productMessaging.blurb.cta.url),
   REPLY_SOURCE: highlightAlgal(replySource.trimEnd()),
   REPLY_MAX_AGENT_CALLS: String(reply.manifest.budgets.maxAgentCalls),
   REPLY_RECEIPT_SHORT: escapeHtml(replyReceipt.digest.slice(0, 23)),
@@ -484,7 +495,7 @@ const replacements: Record<string, string> = {
   PLATFORM_BADGES: renderPlatformBadges(),
   CIVILIZATION_EXAMPLE,
   SITE_DESCRIPTION: escapeHtml(SITE_DESCRIPTION),
-  SITE_HERO_HEADING: marketingHeading(productMessaging.hero.heading, 5),
+  SITE_HERO_HEADING: marketingHeading(productMessaging.hero.heading, 4),
   SITE_HERO_SUMMARY: escapeHtml(productMessaging.hero.summary),
   SITE_PRIMARY_ACTION: escapeHtml(productMessaging.hero.primaryAction),
   SITE_SECONDARY_ACTION: escapeHtml(productMessaging.hero.secondaryAction),
@@ -564,11 +575,12 @@ const pages: { file: string; out: string; meta: SitePageMeta }[] = [
 // repo and are not mirrored.
 
 const DOC_GROUPS: { title: string; pages: string[] }[] = [
-  { title: "Start here", pages: ["native-release", "native-workbench", "source-language", "scaling-programs", "library", "scale-measurements", "vm"] },
-  { title: "Vision", pages: ["vision", "lineage", "why-unique"] },
-  { title: "Concepts", pages: ["algal-design", "design", "agent-loop-and-organism", "programmable-applications", "application-host-adapters", "executors", "model-router", "diagrams", "repair", "program-database"] },
-  { title: "Life and selection", pages: ["habitats", "civilization", "cumulative-skill-experiment"] },
-  { title: "Applications and workflows", pages: ["use-cases", "when-algal-wins", "browser-grow", "browser-tasks", "browser-inference", "malleable-site", "malleable-workbench", "local-triage", "adaptive-inventory", "agent-tool", "coding-harness", "coding-operations", "pr-shepherd"] },
+  { title: "Learn the language", pages: ["source-language", "scaling-programs", "library", "diagrams"] },
+  { title: "Run a program", pages: ["native-release", "native-workbench", "vm", "executors", "model-router", "use-cases", "agent-tool"] },
+  { title: "Pause, resume, and replay", pages: ["repair", "coding-operations", "pr-shepherd", "scale-measurements"] },
+  { title: "Evolve programs", pages: ["task-optimization", "habitats", "civilization", "program-database"] },
+  { title: "Why ALGAL", pages: ["vision", "lineage", "why-unique", "when-algal-wins", "algal-design", "agent-loop-and-organism", "design"] },
+  { title: "Applications", pages: ["programmable-applications", "application-host-adapters", "adaptive-inventory", "browser-grow", "browser-tasks", "browser-inference", "malleable-site", "malleable-workbench", "local-triage"] },
 ];
 const DOC_SLUGS = DOC_GROUPS.flatMap(group => group.pages);
 const SPEC_SLUGS = ["organism", "expr", "foundry", "search", "bench", "mailbox", "process", "process-evidence", "process-journal", "application", "coding-job", "coding-job-v2", "coding-operation", "replay", "vendor"];
@@ -729,6 +741,9 @@ for (const [name, manifest] of manifests) {
 await emitDiagram("reply-run", replyRunDiagram, { receipt: replyReceipt });
 
 await writeFile(join(DIST, "receipts/habitat.receipt.json"), `${canonicalizeReceipt(habitatReceipt)}\n`);
+// The hero proof: the release-review program and the report of its recorded run.
+await cp(releaseReviewPath, join(DIST, "examples/release-review.algal.json"));
+await cp(join(SITE, "launch/vm-demo-report.json"), join(DIST, "launch/vm-demo-report.json"));
 await writeFile(join(DIST, "examples/route.algal"), routeSource);
 await writeFile(join(DIST, "examples/route.algal.json"), `${JSON.stringify(manifestToJson(route.manifest), null, 2)}\n`);
 await writeFile(join(DIST, "examples/route.source-map.json"), `${JSON.stringify(route.sourceMap, null, 2)}\n`);
@@ -777,7 +792,7 @@ await writeFile(join(authoringDownloadDirectory, "diagnostic.json"), `${JSON.str
 
 // Render each page fragment inside the shared document, then apply the
 // measured placeholders across the whole emitted document.
-replacements.BUILD_STATS = `${verifiedRuns} recorded runs replay-verified in this build`;
+replacements.BUILD_STATS = `${verifiedRuns} recorded runs replayed for this build`;
 // Page names by path, for the 404 page's "Did you mean" suggestion. The
 // shared status page takes labels of at most 48 characters.
 const routeLabels = new Map<string, string>();
@@ -901,9 +916,9 @@ const indexSpec = `<section class="docs-index-group"><h2>Specification</h2><ul c
 await emitDocPage({
   page: "docs", path: "/docs/",
   title: "ALGAL documentation",
-  description: "Install and run the ALGAL VM, write programs in .algal source, and read the v1 contract specification. These pages render the repository's own Markdown.",
+  description: "Learn the ALGAL language, run a program, pause and resume it, replay a run, and evolve programs. The pages render the repository's own Markdown and the v1 specification.",
   ogTitle: "ALGAL documentation",
-}, `<section class="page-intro"><p class="eyebrow">Documentation</p><h1>The reference shelf.</h1><p class="lede">Install the VM, write programs in <code>.algal</code> source, and read the v1 specification. Each page renders the Markdown in the repository's <code>docs/</code> and <code>spec/v1/</code> folders; dated reviews, pilot results, and research notes stay on GitHub.</p></section><div class="docs-layout">${docsRail("index", docTitles)}<div class="docs-article docs-index"><div class="docs-index-groups">${indexGroups}${indexSpec}</div></div></div>`);
+}, `<section class="page-intro"><p class="eyebrow">Documentation</p><h1>Pick the page by the job.</h1><p class="lede">Learn the language, run a program, pause and resume it, replay a run, or evolve a program into a better one. Each page renders the Markdown in the repository's <code>docs/</code> and <code>spec/v1/</code> folders, and the specification sits at the end.</p></section><div class="docs-layout">${docsRail("index", docTitles)}<div class="docs-article docs-index"><div class="docs-index-groups">${indexGroups}${indexSpec}</div></div></div>`);
 
 // --- Authored content: blog posts and comparison pages ---------------------
 // Same renderer as the docs mirror, but these pages are site-native: they

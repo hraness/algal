@@ -121,8 +121,7 @@ also retains checksum-bound release metadata. This is diagnostic provenance,
 not a publisher signature. [The native release guide](native-release.md) describes
 the package checks and platform support.
 
-The CLI remains an application VM, not an OS sandbox or hypervisor. It has bounded
-programs and process journals, but no general multi-tenant service, distributed
-custody, global store quota, or retention/GC service. Native packages are still
-unsigned, unnotarized prereleases. Coding-job reconciliation and repair validation
-currently use the Bun host; this native demo makes no claim of their parity.
+The CLI is an application VM, not an OS sandbox or hypervisor: programs run with
+declared limits and process journals, and your host application owns isolation,
+store quotas, and retention. Coding-job reconciliation and repair validation run
+on the Bun host.

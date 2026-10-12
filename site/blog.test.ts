@@ -64,14 +64,19 @@ test("only indexable posts reach the index, feed, sitemap, and llms.txt", () => 
   }
 });
 
-test("reading pages hide dates while discovery records accurate revisions", () => {
+test("reading pages and the index show publication dates while sources keep their check dates private", () => {
+  const index = renderBlogIndex(posts);
   for (const post of posts) {
     expect(post.updated).toBe("2026-10-05");
-    expect(renderPostArticle(post)).not.toContain("<time");
-    expect(renderPostArticle(post)).not.toContain(">Checked ");
+    const article = renderPostArticle(post);
+    expect(article).toContain(`<time dateTime="${post.published}">`);
+    expect(article).not.toContain(">Checked ");
     expect(JSON.stringify(postJsonLd(post))).toContain('"dateModified":"2026-10-05T00:00:00.000Z"');
+    if (post.indexable) {
+      expect(index).toContain(`<time datetime="${post.published}">`);
+      expect(index).toContain(`src="/og/blog/${post.slug}.png"`);
+    }
   }
-  expect(renderBlogIndex(posts)).not.toContain("<time");
 });
 
 test("the hub stays unpublished until a registered relation has a live post", () => {
