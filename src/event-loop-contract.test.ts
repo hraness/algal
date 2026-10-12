@@ -146,6 +146,22 @@ test("unchanged digest fixes byte length even when a new transition is accepted"
   expect(code(seal(trace))).toBe("ACCEPTED");
 });
 
+test("nonadjacent state digest fixes byte length across accepted transitions", () => {
+  const trace = clone();
+  const first = trace.entries[0];
+  const second = trace.entries[3];
+  const third = structuredClone(second);
+  third.source = "source-c";
+  third.delivery = "return";
+  third.decision.stateDigest = first.decision.stateDigest;
+  trace.entries = [first, second, third];
+  expect(code(seal(trace))).toBe("ACCEPTED");
+  third.decision.resources.stateBytes = 10;
+  expect(code(seal(trace))).toBe("EVENT_LOOP_SEMANTIC");
+  third.decision.resources.stateBytes = 11;
+  expect(code(seal(trace))).toBe("ACCEPTED");
+});
+
 test("count and declared byte limits enforce both edges and first excess", () => {
   const trace = clone();
   const eventBytes = Buffer.byteLength(canonicalize({source: "source-a", sequence: 0, type: "increment", payload: {amount: 1}}));

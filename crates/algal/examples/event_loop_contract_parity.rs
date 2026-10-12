@@ -1,7 +1,7 @@
 use algal::{
     Result,
     canonical::{canonical, read_json},
-    event_loop_contract::parse_event_loop_trace,
+    event_loop_contract::summarize_event_loop_trace,
 };
 use serde_json::{Value, json};
 
@@ -19,8 +19,8 @@ fn main() -> Result<()> {
             .as_str()
             .filter(|name| !name.is_empty() && name.len() <= 64)
             .ok_or_else(|| algal::Error::invalid("invalid vector name"))?;
-        let result = match parse_event_loop_trace(&item["value"]) {
-            Ok(digest) => json!({"digest":digest}),
+        let result = match summarize_event_loop_trace(&item["value"]) {
+            Ok((digest, summary)) => json!({"digest":digest,"summary":summary}),
             Err(error) => json!({"code":error.code}),
         };
         results.push(json!({"name":name,"result":result}));

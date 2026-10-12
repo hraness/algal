@@ -121,6 +121,13 @@ fn resources(value: &Value, max_fuel: usize, max_state: usize, max_output: usize
     number(&value["stateBytes"], 0, max_state)?;
     number(&value["outputEvents"], 0, max_output)
 }
+fn remember_state(sizes: &mut BTreeMap<String, usize>, state: &str, size: usize) -> Result<()> {
+    if sizes.get(state).is_some_and(|previous| *previous != size) {
+        return Err(error("EVENT_LOOP_SEMANTIC"));
+    }
+    sizes.insert(state.to_owned(), size);
+    Ok(())
+}
 
 /// Checks a trace's closed shape, digests, bounded summaries and event-key
 /// binding. Does not check the behavior schema, transition replay or effects.
@@ -154,6 +161,8 @@ pub fn parse_event_loop_trace(value: &Value) -> Result<String> {
     let max_mailbox = number(&limits["maxMailboxDepth"], 1, 1_024)?;
     let entries = list(&value["entries"], 1, 256)?;
     let mut bound = BTreeMap::new();
+    // One state per entry at most, so this map has at most 256 keys.
+    let mut state_sizes = BTreeMap::new();
     let mut last_state: Option<(&str, usize)> = None;
     for entry in entries {
         closed(
@@ -257,6 +266,7 @@ pub fn parse_event_loop_trace(value: &Value) -> Result<String> {
                 {
                     return Err(error("EVENT_LOOP_SEMANTIC"));
                 }
+                remember_state(&mut state_sizes, state, state_bytes)?;
                 bound.insert(key, content);
             }
             _ => {
@@ -302,11 +312,10 @@ pub fn parse_event_loop_trace(value: &Value) -> Result<String> {
                     || matches!(outcome, "defer" | "escalate" | "no-transition") && requested > 0
                     || matches!(outcome, "defer" | "escalate" | "no-transition")
                         && last_state.is_some_and(|(old, _)| old != state)
-                    // A repeated state digest also fixes its canonical byte length.
-                    || last_state.is_some_and(|(old, size)| old == state && size != state_bytes)
                 {
                     return Err(error("EVENT_LOOP_SEMANTIC"));
                 }
+                remember_state(&mut state_sizes, state, state_bytes)?;
                 last_state = Some((state, state_bytes));
                 bound.insert(key, content);
             }
@@ -323,4 +332,70 @@ pub fn parse_event_loop_trace(value: &Value) -> Result<String> {
     body.remove("digest");
     equal_hash(&Value::Object(body), &value["digest"])?;
     Ok(sha(&value["digest"])?.to_owned())
+}
+
+/// Derived counts from validated trace claims, never measured execution or host effects.
+#[derive(Debug, Default, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EventLoopTraceSummary {
+    pub accepted: usize,
+    pub duplicate: usize,
+    pub backpressure: usize,
+    pub failed: usize,
+    pub continued: usize,
+    pub quiet: usize,
+    pub deferred: usize,
+    pub escalated: usize,
+    pub unmatched: usize,
+    pub fuel_claimed: usize,
+    pub peak_state_bytes_claimed: usize,
+    pub notifications_claimed: usize,
+    pub effects_requested_claimed: usize,
+    pub effects_settled_claimed: usize,
+}
+
+/// Validate first, then sum only the checked values. Counts cannot overflow:
+/// at most 256 entries, 100,000 fuel and 64 notifications per entry.
+pub fn summarize_event_loop_trace(value: &Value) -> Result<(String, EventLoopTraceSummary)> {
+    let identity = parse_event_loop_trace(value)?;
+    let mut summary = EventLoopTraceSummary::default();
+    for entry in value["entries"]
+        .as_array()
+        .ok_or_else(|| error("EVENT_LOOP_PARSE"))?
+    {
+        let decision = &entry["decision"];
+        match decision["kind"].as_str() {
+            Some("duplicate") => summary.duplicate += 1,
+            Some("backpressure") => summary.backpressure += 1,
+            Some("accepted") | Some("failed") => {
+                if decision["kind"] == "accepted" {
+                    summary.accepted += 1;
+                    match decision["outcome"].as_str() {
+                        Some("continue") => summary.continued += 1,
+                        Some("quiet") => summary.quiet += 1,
+                        Some("defer") => summary.deferred += 1,
+                        Some("escalate") => summary.escalated += 1,
+                        Some("no-transition") => summary.unmatched += 1,
+                        _ => unreachable!("validated outcome"),
+                    }
+                    summary.effects_requested_claimed +=
+                        number(&decision["effects"]["requested"], 0, 64)?;
+                    summary.effects_settled_claimed +=
+                        number(&decision["effects"]["settled"], 0, 64)?;
+                } else {
+                    summary.failed += 1;
+                }
+                let resources = &decision["resources"];
+                summary.fuel_claimed += number(&resources["fuel"], 0, 100_000)?;
+                summary.peak_state_bytes_claimed = summary.peak_state_bytes_claimed.max(number(
+                    &resources["stateBytes"],
+                    0,
+                    262_144,
+                )?);
+                summary.notifications_claimed += number(&resources["outputEvents"], 0, 64)?;
+            }
+            _ => unreachable!("validated decision"),
+        }
+    }
+    Ok((identity, summary))
 }

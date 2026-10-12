@@ -186,3 +186,24 @@ fn event_loop_contract_same_state_fixes_accepted_and_pending_byte_length() {
         assert_eq!(code(&trace), "EVENT_LOOP_SEMANTIC", "{outcome}");
     }
 }
+
+#[test]
+fn event_loop_contract_nonadjacent_state_fixes_byte_length() {
+    let base = fixture()["base"].clone();
+    let first = base["entries"][0].clone();
+    let second = base["entries"][3].clone();
+    let mut third = second.clone();
+    third["source"] = json!("source-c");
+    third["delivery"] = json!("return");
+    third["decision"]["stateDigest"] = first["decision"]["stateDigest"].clone();
+    let mut trace = base;
+    trace["entries"] = json!([first, second, third]);
+    seal(&mut trace);
+    assert_eq!(code(&trace), "ACCEPTED");
+    trace["entries"][2]["decision"]["resources"]["stateBytes"] = json!(10);
+    seal(&mut trace);
+    assert_eq!(code(&trace), "EVENT_LOOP_SEMANTIC");
+    trace["entries"][2]["decision"]["resources"]["stateBytes"] = json!(11);
+    seal(&mut trace);
+    assert_eq!(code(&trace), "ACCEPTED");
+}

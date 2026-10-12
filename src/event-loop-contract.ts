@@ -119,6 +119,13 @@ export function parseEventLoopTrace(value: unknown): { digest: string; entries: 
   const maxMailbox = int(limits.maxMailboxDepth, 1, 1_024);
   const entries = list(root.entries, 1, 256);
   const bound = new Map<string, string>();
+  // At most one digest per entry, so this map has at most 256 keys.
+  const stateSizes = new Map<string, number>();
+  function rememberState(state: string, size: number): void {
+    const previous = stateSizes.get(state);
+    if (previous !== undefined && previous !== size) fail("EVENT_LOOP_SEMANTIC");
+    stateSizes.set(state, size);
+  }
   let lastState: string | undefined;
   let lastStateBytes: number | undefined;
   for (const entry of entries) {
@@ -159,6 +166,7 @@ export function parseEventLoopTrace(value: unknown): { digest: string; entries: 
         const stateBytes = int(resources.stateBytes, 0, maxState);
         if (int(resources.outputEvents, 0, maxOutput) !== 0 ||
             (lastState !== undefined && (state !== lastState || stateBytes !== lastStateBytes))) fail("EVENT_LOOP_SEMANTIC");
+        rememberState(state, stateBytes);
         bound.set(key, content);
         continue;
       }
@@ -184,9 +192,7 @@ export function parseEventLoopTrace(value: unknown): { digest: string; entries: 
       if (["quiet", "defer", "escalate", "no-transition"].includes(outcome) && outputs.length > 0) fail("EVENT_LOOP_SEMANTIC");
       if (["defer", "escalate", "no-transition"].includes(outcome) && requested > 0) fail("EVENT_LOOP_SEMANTIC");
       if (["defer", "escalate", "no-transition"].includes(outcome) && lastState !== undefined && state !== lastState) fail("EVENT_LOOP_SEMANTIC");
-      // Only compare byte claims when the state digest matches the latest
-      // accepted state in this trace; earlier nonadjacent states are not checked.
-      if (lastState === state && stateBytes !== lastStateBytes) fail("EVENT_LOOP_SEMANTIC");
+      rememberState(state, stateBytes);
       lastState = state;
       lastStateBytes = stateBytes;
       bound.set(key, content);

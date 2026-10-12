@@ -75,20 +75,41 @@ transition performed an external effect.
 ranges 0 to `limits.maxTransitionFuel` (at most 100,000), 0 to
 `limits.maxStateBytes` (at most 262,144), and 0 to
 `limits.maxOutputEvents` (at most 64). `outputEvents` equals `outputs.length`
-for an accepted decision and is zero for a failed decision. When a decision
-repeats the most recently accepted state digest, its `stateBytes` must match
-that decision's size, including for failed, pending, and unmatched decisions.
-This only checks consistency with the latest state in the trace, not whether
-the digest or size describes an actual state. Fuel and state-size figures are
-recorded claims, not measurements; a trace digest does not establish the truth
-of a host observation.
+for an accepted decision and is zero for a failed decision. The same
+`stateDigest` must have the same `stateBytes` throughout the trace, including
+when it reappears after a different state. The parser keeps at most 256 such
+bindings, one per entry. Failed, pending, and unmatched decisions also check
+the latest accepted state when there is one. These checks compare recorded
+claims; they do not establish that a digest or size describes an actual state.
+Fuel and state-size figures are claims, not measurements; a trace digest does
+not establish the truth of a host observation.
+
+## Derived summary
+
+After validation, `summarizeEventLoopTrace` in TypeScript and
+`summarize_event_loop_trace` in Rust return the trace digest and the same
+14-field derived summary. The decision counts `accepted`, `duplicate`,
+`backpressure`, and `failed` add up to the 1 to 256 entries. The accepted
+outcome counts `continued`, `quiet`, `deferred`, `escalated`, and `unmatched`
+add up to `accepted`. `fuelClaimed` sums the accepted and failed resource
+claims (0 to 25,600,000). `peakStateBytesClaimed` is the maximum accepted or
+failed state-size claim (0 to 262,144). `notificationsClaimed` sums their
+output-event claims (0 to 16,384). `effectsRequestedClaimed` and
+`effectsSettledClaimed` sum accepted effect counts; both are zero in this
+pure-transition proposal. Backpressure with `policy: "defer"` counts under
+`backpressure`, not `deferred`, which counts accepted transitions. A duplicate
+or backpressure decision contributes no resource claim. The derived object is
+not part of the hashed trace and has no wall-clock or provider fields. These
+are static counts of checked claims, not measured usage or evidence that a
+transition or external effect occurred.
 
 The parser rejects invalid shapes with the `EVENT_LOOP_*` codes from the
 [event-loop contract](event-loop.md#errors-and-versioning), including
 `EVENT_LOOP_SEMANTIC` for inconsistent decisions. The fixed offline fixture in
-`scripts/fixtures/event-loop-contract.json` checks both implementations with
-the same valid and invalid trace values. Neither implementation schedules
-actors, performs host calls, checks state transitions, verifies notifications,
-or proves a resource count. A future replay verifier must join this trace to a
-checked behavior, retained earlier bindings, and an effect adapter's
-idempotency records. This proposal does not complete the P1 gate.
+`scripts/fixtures/event-loop-contract.json` and a derived nonadjacent-state
+vector check both implementations with the same valid and invalid trace values.
+Neither implementation schedules actors, performs host calls, checks state
+transitions, verifies notifications, or proves a resource count. A future
+replay verifier must join this trace to a checked behavior, retained earlier
+bindings, and an effect adapter's idempotency records. This proposal does not
+complete the P1 gate.
