@@ -1,16 +1,20 @@
 # ALGAL
 
-> 🌱 ALGAL is a programming language for agent programs that outlive a single
-> run. A program can pause for your approval, resume after a crash without
-> redoing finished work, and leave receipts that replay exactly what it did.
-> Work that succeeds is kept as a typed procedure with its evidence, so the next
-> program starts from what the last one learned.
+> 🌱 ALGAL is a programming language for agents that run for weeks. A program is
+> data the host can inspect and run; it pauses for an approval, resumes after a
+> restart, and replays from recorded effects. Programs evolve by proposing,
+> evaluating, and adopting better versions of themselves, so the software
+> accumulates competence instead of starting over.
 >
 > Ask your agent to set it up: https://algal.computer
 >
 > — Ben Guo
 
-**Software that accumulates competence.**
+ALGAL is a programming language for agents that run for weeks. An ALGAL program
+is data: a typed graph of steps, model calls, and tools that a host can inspect,
+hash, and run. A program can pause for an approval, exit, and resume days later
+on another machine without repeating the work it already did. Every model call
+and tool result is recorded, so a run can be replayed and checked offline.
 
 ```lisp
 (program quote ((order json)) json
@@ -21,13 +25,11 @@
             total (+ subtotal (if (>= subtotal 50) 0 5)))))
 ```
 
-ALGAL is a programming language and VM where a program is a value. It has a
-content-derived identity, a declared interface, and limits it cannot widen.
-A Lisp-shaped surface and the readable `.algal` source lower to the same
-manifest, so a person, a macro, or a model can write a procedure and the host
+A Lisp-shaped surface and the readable `.algal` source compile to the same
+program, so a person, a macro, or a model can write a procedure and the host
 checks it the same way. The macro expansion is printed and hashed, and all
 eleven paired programs in [the source experiment](docs/lisp-source-experiment.md)
-produce exactly the same manifest digest as their readable twins.
+produce exactly the same program digest as their readable twins.
 
 ```lisp
 (program gross ((order json)) json
@@ -36,31 +38,46 @@ produce exactly the same manifest digest as their readable twins.
       (record gross gross tax tax total (+ gross tax)))))
 ```
 
-Programs wait for your approval for as long as it takes, resume after a crash
-without redoing finished work, and leave receipts that replay offline. When a
-procedure works, ALGAL keeps it with its evidence: a typed component any larger
-program can call by digest. Every success makes the next task start further
-along, and a fixed model works inside an environment that keeps getting more
-capable.
+Programs evolve. ALGAL proposes a candidate, evaluates it against the current
+version on declared cases, and adopts the one that scores better, so the
+software accumulates competence over time. A procedure that works is kept as a
+typed component any larger program can call by digest. The TypeScript and Rust
+runtimes share the same program and record formats, so a run saved by one
+resumes in the other.
+
+```mermaid
+flowchart LR
+  P["Program<br/>typed JSON graph"] --> H["Host runtime<br/>TypeScript or Rust"]
+  M["Approval mailbox"] --> H
+  H --> R["Recorded effects<br/>model calls, tool results, decisions"]
+  R --> V["Replay and verify<br/>offline, no credentials"]
+  H -. "pause, exit, resume on any machine" .-> H
+```
 
 [algal.computer](https://algal.computer) has the tour, the docs, and the blog.
 [algal.cloud](https://algal.cloud) runs ALGAL as habitats: hosted homes where
 your programs keep running, keep their receipts, and keep improving.
 
-Install the native CLI on macOS (Apple silicon) or Linux (x86_64 and arm64)
-with `curl -fsSL https://algal.computer/install.sh | sh`. Verified installs
-update automatically within the `vm` channel: `algal update disable` turns that
-off and `algal update` installs the newest verified build now. Explicit
-versions, CI, offline verification, and hash-pinned SDK calls stay fixed. See
-[native CLI updates](docs/native-release.md#updates). The Bun runtime runs from
-this checkout.
+Install the native CLI on macOS (Apple silicon) or Linux (x86_64 and arm64):
+
+```sh
+curl -fsSL https://algal.computer/install.sh | sh
+```
+
+Status: ALGAL ships as a prerelease; the installer pins the current release from
+GitHub Releases, and the [native release guide](docs/native-release.md) lists
+supported targets, updates, and manual verification. Installs update
+automatically within the `vm` channel; `algal update disable` turns that off and
+`algal update` installs the newest build now. The Bun runtime runs from this
+checkout.
 
 ## The idea
 
 A computer should be able to accumulate tested ways of acting, not only produce
-new answers or new code. A model proposes a bounded, executable procedure. The
-procedure is checked, measured on declared cases, kept with its evidence,
-composed into larger procedures, and revised under rules the host sets. Useful
+new answers or new code. A model proposes an executable procedure with
+declared limits. The procedure is checked, measured on declared cases, kept
+with its results, composed into larger procedures, and revised under rules the
+host sets. Useful
 work leaves the computer with a more capable, reusable way of doing the next
 piece of work.
 
@@ -70,15 +87,16 @@ Four properties give that idea its shape:
   content-derived identity and a declared interface, so one program calls
   another by digest.
 - **Procedures are data.** Manifests are built to be generated and checked, so
-  hand-written and model-proposed procedures enter through one admission path.
+  hand-written and model-proposed procedures pass the same checks before they
+  run.
 - **Judgment is typed.** Model decisions sit in cells with declared context and
   budgets, and ordinary computation supplies the discipline around them.
 - **Selection is recorded.** The host picks which successor to keep, and the
   receipt carries the provenance and the permission.
 
 The [vision](docs/vision.md) states the loop in full: declare a responsibility,
-compile it into a bounded graph, run it with continuity, reconcile changed
-evidence, retain what improves, and carry improvements into every consumer. The
+compile it into a graph with declared limits, run it with continuity,
+reconcile changed evidence, retain what improves, and carry improvements into every consumer. The
 [lineage](docs/lineage.md) places it among Lisp, Emacs, Smalltalk, Urbit,
 Engelbart, and the research on self-improving programs.
 
@@ -91,7 +109,7 @@ Engelbart, and the research on self-improving programs.
 | Review a change brief now; approve the exact local report later | Evidence, proposal, human decision, and publication history across separate invocations | [Native workbench](docs/native-workbench.md); optional [on-device Apple brief](docs/apple-brief.md) |
 | Turn a coding attempt into a checked patch | The pinned source revision, the proposed patch, results of the tests you chose, and a record of which process owns any job whose outcome is still unknown | [Durable repairs](docs/repair.md) |
 | Give another reviewer a verifiable execution history | One portable evidence file that replays without your store, credentials, or model | [Offline evidence](docs/vm.md#verify-a-process-away-from-its-original-host) |
-| Route support requests and reuse a draft helper over a bounded inbox | Explicit context, selected branches, child program identities, and recorded results | [Readable programs](#read-the-program-see-its-structure) and [reuse](#write-a-program-once-call-it-or-use-it-for-each-item) |
+| Route support requests and reuse a draft helper over a fixed inbox | Explicit context, selected branches, child program identities, and recorded results | [Readable programs](#read-the-program-see-its-structure) and [reuse](#write-a-program-once-call-it-or-use-it-for-each-item) |
 | Observe a PR until checks settle, without spending model calls on polling | The exact commit, its CI and policy results, waits with a poll limit, and a review or repair packet | [Read-only PR shepherd](docs/pr-shepherd.md) |
 | Retain observations, investigate changed premises, and activate an evaluated procedure revision | Expected-head application state, scope-bound derivations, durable intents, and captured views | [Adaptive inventory](docs/adaptive-inventory.md) and [application contract](spec/v1/application.md) |
 
@@ -102,14 +120,8 @@ once the workflow proves useful.
 
 ## Try the VM with one executable
 
-Install the native CLI into `~/.local/bin` on macOS (Apple silicon) or
-Linux (x86_64 or arm64). The script checks the archive's SHA-256 and the executable's
-recorded digest before it installs anything:
-
-```sh
-curl -fsSL https://algal.computer/install.sh | sh
-```
-
+The installer above puts `algal` in `~/.local/bin` and checks the archive's
+SHA-256 and the executable's recorded digest before it installs anything.
 `ALGAL_VERSION=<tag>` installs one exact release and `ALGAL_INSTALL_PREFIX`
 changes the prefix. The [release guide](docs/native-release.md) covers manual
 verification and the checkout installer
@@ -142,18 +154,19 @@ that review or choose a new directory rather than deleting saved work.
 If approval rejects a proposal or action, copy the command from that review's
 report; do not substitute a digest from another run.
 
-`crash-laboratory/proof.json` records actual owned-process SIGKILL tests: recover
-an interrupted read without repeating the completed prefix write, and stop
-before redispatching an uncertain write. It also checks approval, denial, and
-offline verification after moving the source store away. These default demos
-use **deterministic decision fixtures**; their durable state, journals, recovery,
-and verification are real. They do not evaluate live model quality.
+`crash-laboratory/proof.json` records the SIGKILL tests the demo runs on its
+own processes: it recovers an interrupted read without repeating the completed
+prefix write, and stops before redispatching an uncertain write. It also checks
+approval, denial, and offline verification after moving the source store away.
+The default demos answer the decision step with a scripted adapter, so every
+run reproduces exactly; the saved state, journals, recovery, and verification
+are the same paths a live model run uses.
 
 On a compatible Mac, the optional [private change brief](docs/apple-brief.md)
 uses **one real on-device Apple model request** to draft from your supplied
 evidence. It requires the separate Apple bridge and Python demo harness. The
-workflow then waits for exact human approval; continuation admits no model
-executor and reuses the retained result. The generated prose still needs review.
+workflow then waits for exact human approval; continuation makes no model call
+and reuses the retained result.
 
 ### What makes this useful
 
@@ -164,9 +177,27 @@ same program can run in the native kernel or the Bun reference runtime, and the
 cross-runtime demo resumes each runtime's saved work in the other on a shared
 local store.
 
-Efficiency comes from explicit context, bounded selected paths, retained effects,
-and model-free waiting and verification. The demos measure those operations;
-they do not establish token, cost, or latency savings against other engines.
+Efficiency comes from explicit context, selected paths, retained effects, and
+waiting and verification that make no model calls. The demos measure those
+operations directly.
+
+### Measured
+
+`bun scripts/vm-demo.ts` runs two copies of
+[`release-review.algal.json`](examples/vm/release-review.algal.json) through the
+CLI on a local store. Each copy recommends, proposes, waits for an approval,
+exits, and resumes in a new process. The same program then runs again with its
+checkpoint discarded before the restart. Captured on 2026-10-13; a scripted
+adapter answers the decision step:
+
+| Run | Decision calls | Receipts verified offline | Model calls during verify |
+| --- | --- | --- | --- |
+| Resumed from the recorded prefix | 2 | 4 | 0 |
+| Restarted from the top | 4 | | |
+
+The resumed run makes no new decision after the restart, and the mailbox
+delivers a duplicate approval once (2 duplicates dropped). The report the site
+shows is [`site/launch/vm-demo-report.json`](site/launch/vm-demo-report.json).
 
 Compilation has limits as well as execution: recursive compilation shares a
 1,024-manifest, 4,096-cell, 16,384-edge, 64 MiB normalized-input allowance.
@@ -523,45 +554,45 @@ carries no host code. It names things the host or the contract already admits.
 
 Cell kinds:
 
-- `input` — an entry point. Run args supply its output values.
-- `const` — a literal producer. Ports are declared values.
-- `fn` — a pure function from the host's registry (`echo.v1`, `tag.v1`,
+- `input`: an entry point. Run args supply its output values.
+- `const`: a literal producer. Ports are declared values.
+- `fn`: a pure function from the host's registry (`echo.v1`, `tag.v1`,
   `coalesce.v1`, `pick.v1`, `format.v1` ship built in).
-- `expr` — a bounded pure `algal.expr.v1` program carried in the manifest
+- `expr`: a bounded pure `algal.expr.v1` program carried in the manifest
   itself: contract-interpreted, fuel-metered, effect-free. Where `fn` names
   host-registered functions, `expr` is the manifest's own data-transformation
-  language — arithmetic, conditionals, lexical `let`s, `get` paths,
-  `map`/`filter`/`fold`, strings — evaluated identically by both runtimes
+  language, arithmetic, conditionals, lexical `let`s, `get` paths,
+  `map`/`filter`/`fold`, strings, evaluated identically by both runtimes
   (one Rust evaluator; native in the kernel, WASM in Bun). Output commits to
   `out`; activation burns 100 + fuel work; verify replays by re-evaluation.
-- `tool` — a typed external effect resolved only from the host's tool registry.
+- `tool`: a typed external effect resolved only from the host's tool registry.
   Read/write class, inputs, outputs, work cost, output bytes, timeout, and
   idempotency key are explicit; results and failures are receipted and replayed
   without repeating live IO. Agent cells may request the same admitted tools
   during bounded turns alongside pure function callbacks.
-- `agent` — a bounded model call: a declared context view, a prompt, a typed
+- `agent`: a bounded model call: a declared context view, a prompt, a typed
   output contract, an optional route, declared tool callbacks, and byte, turn,
-  and wall-clock (`budget.maxEffectMs`) budgets — a hung executor becomes a
+  and wall-clock (`budget.maxEffectMs`) budgets; a hung executor becomes a
   recorded, routable failure instead of a hung run.
-- `classifier` — an agent cell restricted to a closed set of labels, with an
+- `classifier`: an agent cell restricted to a closed set of labels, with an
   optional `onMiss` fallback. Its output drives `guard`ed edges, which is how
   routing decisions live in the structure instead of in prose. A classifier
   may run in `shadow` mode: the model's decision is recorded on the receipt
-  while a declared label stays authoritative — audition before promotion.
-- `gate` — an approval point: a `choice` cell whose effect request carries
+  while a declared label stays authoritative: audition before promotion.
+- `gate`: an approval point: a `choice` cell whose effect request carries
   `kind:"gate"` so executors route it to a human or a policy check instead of
   a model. Approval stays visible in the structure and on the receipt.
-- `decide` — a declared map of typed questions (`noul` keep-probabilities,
-  `choice` picks, `score` ratings) answered by a *decision provider* — typed
+- `decide`: a declared map of typed questions (`noul` keep-probabilities,
+  `choice` picks, `score` ratings) answered by a *decision provider*, typed
   decisions, never generated text. The output contract is derived from the
   question map (`{"answers":{…}}`), the effect request carries `questions`,
   and the provider must return exactly the declared answers. Decision
-  executors serve `decide` and `classifier` cells only — they can never
+  executors serve `decide` and `classifier` cells only; they can never
   generate agent output or approve a gate. Cloudflare Clef serves these
   decisions when you select `--clef` (`clef` by default, or `clef-flash`).
   Paid inference is opt-in. Set `CLOUDFLARE_ACCOUNT_ID` and
   `CLOUDFLARE_API_TOKEN`; `CLOUDFLARE_AUTH_TOKEN` is a token alias.
-- `recall` — an expression-derived semantic query over a host-owned index,
+- `recall`: an expression-derived semantic query over a host-owned index,
   recorded as an ordinary effect. `out` carries bounded ranked hits; when the
   first hit names a value-store object, `ref` carries its `sha256:` token
   directly into `load`. Empty recall is successful and leaves ref consumers
@@ -570,7 +601,7 @@ Cell kinds:
   source records without summarizing them. The request binds query, `k`, and
   embedder; replay serves the recorded hits and decisions without consulting a
   mutable index.
-- `compact` (an `agent` field, requires `tools`) — recorded tool-log
+- `compact` (an `agent` field, requires `tools`): recorded tool-log
   compaction. When the canonical `toolLog` exceeds `maxLogBytes`, the
   runtime issues a `decide` effect triaging every unpinned entry (keep =
   `noul ≥ 0.5`); the request covers the pre-compaction log and the answers
@@ -586,47 +617,47 @@ Cell kinds:
   closed. See [the runnable elision example](examples/compact-elide.algal.json)
   and [the precise contract](spec/v1/organism.md). This is a byte-budget policy,
   not a measured task-quality or token-cost improvement.
-- `organism` — a sealed sub-manifest referenced by digest. The outer graph sees
+- `organism`: a sealed sub-manifest referenced by digest. The outer graph sees
   only its declared interface ports. This is symbolization: a compound that is
   versioned, inspectable, and not a free primitive. `via` names a transport
   the host configures (`--transports` maps names to bundle directories or
   HTTP(S) base URLs): on a local miss, the closure arrives as a verified
-  bundle — remote resolution, local execution, and the receipt records which
+  bundle, remote resolution, local execution, and the receipt records which
   transport served it.
-- `repeat` — bounded iteration over a digest-embedded sub-manifest: up to
+- `repeat`: bounded iteration over a digest-embedded sub-manifest: up to
   `maxRounds` rounds, with `carry` mapping interface outputs back into the
   next round's inputs and an optional `until` early-exit on an interface
-  output. The evaluator-optimizer pattern as structure — the graph stays a
+  output. The evaluator-optimizer pattern as structure: the graph stays a
   DAG while the automaton gets ticks.
-- `each` — a delivered list fans out: the sub-manifest runs once per element
+- `each`: a delivered list fans out: the sub-manifest runs once per element
   (`over` binds the element), and each interface output collects into a list
   port. Map is a cell; combined with `many` inputs the graph expresses
   fan-out → compute → collect without a loop construct in sight.
-- `store` / `load` — the only data IO cells. `store` writes a `json` payload
-  into the content-addressed store and emits a `ref` port — a `sha256:` token.
+- `store` / `load`: the only data IO cells. `store` writes a `json` payload
+  into the content-addressed store and emits a `ref` port, a `sha256:` token.
   `load` resolves the token back to the payload. No port ever carries more
   than `maxValueBytes` (256 KiB canonical), so bulk data *must* flow through
-  CAS — only digests ride edges, receipts, and contexts. A caller-supplied
-  `ref` must already resolve — `algal store put` mints one — and a store
+  CAS; only digests ride edges, receipts, and contexts. A caller-supplied
+  `ref` must already resolve (`algal store put` mints one), and a store
   that returns wrong content fails `DIGEST_MISMATCH`.
-- `slot` — durable named state across runs: an organism's memory. `read`
+- `slot`: durable named state across runs: an organism's memory. `read`
   emits the stored value (or a declared `default`; empty-without-default
   fails, routable via `on:"fail"`), `write` stores its `data` input and
   echoes it. Reads are recorded on the receipt and served verbatim on
-  replay — a live slot may have moved on since the run being verified.
+  replay; a live slot may have moved on since the run being verified.
 - Capability mailboxes are standard-library `tool` drivers, not a cell kind.
   `mailbox.send.v1` takes a typed `mailbox-send` cap and message;
   `mailbox.receive.v1` takes the independently revocable `mailbox-receive`
   cap. An empty receive suspends the run; an external send plus `resume`
   wakes it. Sends are idempotent by request digest, successful delivery is
   receipted, and verification never consumes the live mailbox.
-- `spawn` — breeding, bounded to one idea. An upstream cell delivers an
+- `spawn`: breeding, bounded to one idea. An upstream cell delivers an
   organism *manifest as data* (typically an agent's `json` output); the
   cell parses it through the ordinary contract, admits it to the store,
-  and runs it as a nested organism under the spawn path — inner cells land
+  and runs it as a nested organism under the spawn path; inner cells land
   on the receipt as `run/echo`, `run/src`, …. `args` maps interface
   inputs; outputs are `data` (the interface outputs) and `digest` (the
-  admitted manifest's `sha256:` — provenance). The spawned organism
+  admitted manifest's `sha256:`, provenance). The spawned organism
   inherits the host registry, executors, store, transports, budgets, and
   depth bound: generated manifests are data, never code.
 
@@ -643,14 +674,14 @@ named formats, unique list items, and records closed to undeclared fields
 that violates the schema fails the consumer's activation, routable through
 `on:"fail"`.
 Guarded edges fire only when the produced choice equals the
-guard label — or, on a `json` producer, when `guard.field` of the delivered
+guard label, or, on a `json` producer, when `guard.field` of the delivered
 record strictly equals `guard.equals`, so routing can depend on a structured
 field without a classifier in between. An edge declared `"on": "fail"`
 fires when its producer's activation *fails* and delivers the failure
-record `{code, message}` to a `json` consumer — recovery cells are
+record `{code, message}` to a `json` consumer; recovery cells are
 structure, and a cell with no fail edge still fails the run closed. Input
 ports are single-assignment unless declared `many`, in which case every
-delivered edge collects into a list — fan-in, including conditional fan-in
+delivered edge collects into a list, fan-in, including conditional fan-in
 through guards. The graph must be acyclic.
 
 ## Put checkable decisions in the structure
@@ -727,7 +758,7 @@ checks both runtimes after removing the original store and adapter paths.
 See [the process VM guide](docs/vm.md) for the lifecycle, JSON report, commands,
 and host trust boundary.
 
-### Durable applications (experimental)
+### Durable applications
 
 The native CLI also exposes the durable application lifecycle from
 [`spec/v1/application.md`](spec/v1/application.md) as `algal application
@@ -742,8 +773,7 @@ comes from a declarative `algal.application-host.v1` policy record passed as
 executable example is [`scripts/application-parity.ts`](scripts/application-parity.ts),
 which drives the whole lifecycle through both runtimes and compares digests;
 [the adaptive inventory guide](docs/adaptive-inventory.md) walks through one
-domain. The surface is experimental: the wire records are versioned, the
-command names are not yet frozen.
+domain. The wire records are versioned.
 
 ## First value
 
@@ -761,40 +791,40 @@ cargo build -p algal
 organism embedded as one cell), `lookup` (an agent reading a record through a
 `pick.v1` tool call), `refine` (a `repeat` evaluator-optimizer loop),
 `panel` (three reviewers fanning into one synthesizer's `many` input),
-`escalate` (field guards routing a ticket record on `severity` — no
+`escalate` (field guards routing a ticket record on `severity`, no
 classifier), `recover` (a classifier miss fails; an `on:"fail"` edge hands
 the record to a fallback cell), and
 `swarm` (an `each` cell mapping a question list through a sub-manifest), and
-`stash` (a document pinned to CAS by a `store` cell — only the `ref` token
+`stash` (a document pinned to CAS by a `store` cell, only the `ref` token
 reaches the `load` cell that resolves it), and `intake` (a schema'd input
 port rejecting a malformed ticket, the failure record routed to a `repair`
 cell through `on:"fail"`), `flaky` (a classifier scripted to emit a bad
-label, then a good one — `retry` re-issues the same signed request and the
+label, then a good one; `retry` re-issues the same signed request and the
 receipt records both attempts under one digest), and `remote` (an organism
-cell whose sub-manifest exists only in a bundle directory — `via` fetches,
+cell whose sub-manifest exists only in a bundle directory; `via` fetches,
 verifies, and runs it), and `approve` (a `gate` cell's decision is a required,
-guard-fed input — the merge cell only activates on "approve"), and `guard`
-(an `assert.v1` invariant fails on a mismatched value — the `on:"fail"` edge
+guard-fed input; the merge cell only activates on "approve"), and `guard`
+(an `assert.v1` invariant fails on a mismatched value; the `on:"fail"` edge
 hands the record to a `hold` cell), and `counter` (a `slot` cell reads a
-durable count, `inc.v1` bumps it, a write-mode `slot` stores it back — state
+durable count, `inc.v1` bumps it, a write-mode `slot` stores it back; state
 that survives between runs), and `breed` (an agent emits a manifest as
-`json`; `spawn` admits it to CAS and runs it — the child's `echo` output
+`json`; `spawn` admits it to CAS and runs it; the child's `echo` output
 surfaces through `data`, the admitted digest through `digest`), and `hive`
 (an agent emits a *list* of candidate manifests; `each` maps them through
-a `spawn` wrapper — a bounded population where `result` collects every
+a `spawn` wrapper, a bounded population where `result` collects every
 candidate's outputs and `child` collects the admitted digests: lineage on
 the receipt, then a `judge` picks one), and `lineage` (a `repeat` cell
 runs writer → `spawn` → judge per round, `carry` feeds each score back as
-feedback, `until` exits when the judge is satisfied — generations of
+feedback, `until` exits when the judge is satisfied; generations of
 generated programs, each digest-pinned under `gen/r<n>/run`), and
 `catalog` (a `push.v1` append writes each run's `child` digests into a
-durable `bred` slot — a breeding journal that persists across runs), and
-`consent` (a generated manifest carries its own `gate` — deny skips the
+durable `bred` slot, a breeding journal that persists across runs), and
+`consent` (a generated manifest carries its own `gate`; deny skips the
 child's effectful cell entirely, so `run.data` reports the verdict and no
 effect was spent), `decide-cell` (typed provider questions), `compact`
 (recorded keep/drop triage over a tool log), and `recall` (an expression-derived
 query returns two hits, recorded noul decisions rerank them, and the winning
-`ref` feeds `load`) — with scripted
+`ref` feeds `load`), with scripted
 responses, then verifies each receipt offline in both runtimes. To run one yourself:
 
 ```sh
@@ -804,11 +834,11 @@ bun run cli run examples/triage.algal.json \
   --responses examples/triage.responses.json --write
 bun run cli verify .algal/runs/<receipt-digest>.json \
   examples/triage.algal.json
-# or omit the manifest — it resolves from the store by the receipt's digest
+# or omit the manifest; it resolves from the store by the receipt's digest
 bun run cli verify .algal/runs/<receipt-digest>.json
 # compare two runs: which cells diverged, what each one cost
 bun run cli diff .algal/runs/<a>.json .algal/runs/<b>.json
-# mint a ref for a payload — then pass the token as a "ref" arg
+# mint a ref for a payload, then pass the token as a "ref" arg
 bun run cli store put payload.json        # → {"ref":"sha256:…"}
 bun run cli store get sha256:…            # → the payload
 # admit separate send/receive mailbox capabilities
@@ -824,7 +854,7 @@ bun run cli unpack bundle.json --dir /tmp/elsewhere   # installs, digests verifi
 ## Semantic recall over the store
 
 `index` builds a derived hybrid index (embeddings + lexical) over stored
-manifests, runs, values, and optional docs — disposable tooling, never
+manifests, runs, values, and optional docs, disposable tooling, never
 contract data: it changes nothing about digests, receipts, or replay.
 `search` ranks chunks by cosine + token overlap and prints snippets. A
 `recall` cell makes the same capability available inside an organism through
@@ -991,8 +1021,8 @@ compete with generated organisms from generation zero onward.
 
 ## Bench: compare systems on one workload
 
-A bench measures several systems — each an organism plus a host-resolved
-executor list — against the same cases. "One cheap call", "one frontier call",
+A bench measures several systems, each an organism plus a host-resolved
+executor list, against the same cases. "One cheap call", "one frontier call",
 and "a decomposed organism whose frontier call is a guarded escalation branch"
 are the same kind of contender. A case passes only when the run completes and
 its declared outputs canonically equal `expect`; every case's receipt is
@@ -1003,7 +1033,7 @@ bun run cli bench examples/bench.config.json --dir .algal --out bench-report.jso
 bun run cli bench inspect bench-report.json
 bun run cli bench verify bench-report.json --dir .algal
 
-# or natively — same config, same report contract
+# or natively, same config, same report contract
 algal bench examples/bench.config.json --dir .algal --out bench-report.json
 algal bench inspect bench-report.json
 algal bench verify bench-report.json --dir .algal
@@ -1018,7 +1048,7 @@ on-device bridge and attaches recall through `algal.host.v1`. Named entries answ
 the first name alphabetically). The report records per-case results, work,
 token usage, per-model effect attribution, and the non-dominated pareto set on
 (quality ↑, tokens ↓, effect calls ↓). A `scorer` program replaces exact-match
-as the pass claim, and an `axes` list replaces the default pareto criteria —
+as the pass claim, and an `axes` list replaces the default pareto criteria;
 each axis a bounded `algal.expr.v1` program over the system's aggregate that
 must return a finite number (`examples/bench-axes.config.json`).
 `examples/bench.config.json` runs it
@@ -1034,7 +1064,7 @@ call that can only read the ticket. Add a `prices` map to the bench config
 dollars at the prices you supply.
 
 `check` admits a manifest without running it: parse, graph validation, and
-interface resolution only. `explain` prints the compiled signature — every
+interface resolution only. `explain` prints the compiled signature; every
 cell's resolved input/output ports (including ports inherited from embedded
 organisms, `repeat`, and `each`) and the guard on every edge. Organisms that
 embed others resolve sub-manifests by digest from the store; `--modules <dir>`
@@ -1043,7 +1073,7 @@ loads a directory of `*.algal.json` files first.
 To go live, point `--executor-cmd` at any program that reads an effect request
 (JSON) on stdin and prints the model's output on stdout, or use
 `--gateway-model <provider/model>` for the built-in Vercel AI Gateway executor
-(short-lived OIDC or a scoped gateway key from the environment — never the
+(short-lived OIDC or a scoped gateway key from the environment, never the
 manifest). ALGAL does not broker provider access; the executor seam is
 where provider auth lives. `--executors <file>` takes a JSON map of
 name → command, so a cell's `route.provider`/`route.preset` picks its model.
@@ -1083,8 +1113,8 @@ externally supplied results, resumption, strict replay, and journal recovery.
   output, which is bound to the declared output contract before it can feed
   downstream edges. A classifier that misses its label set fails closed unless
   `onMiss` is declared.
-- Effect cells may declare `retry: {"attempts": n}` (≤8): a failed effect —
-  executor error or contract violation — is recorded with its request digest
+- Effect cells may declare `retry: {"attempts": n}` (≤8): a failed effect
+  (an executor error or contract violation) is recorded with its request digest
   and the same request re-issued when the executor permits retry. The native
   Apple adapter does not retry, including after invalid output. Every attempt
   is metered and replayed in order; exhaustion fails the cell, routable through
@@ -1095,13 +1125,13 @@ externally supplied results, resumption, strict replay, and journal recovery.
   `decide`, `recall`), an unrouted request binds the first admitting
   executor, and a named route that cannot serve the kind records an
   `EFFECT_UNBOUND` effect. Executors without declarations default to the
-  model-generation kinds only — a model adapter never inherits gate,
+  model-generation kinds only; a model adapter never inherits gate,
   decision, or recall authority. Scripted fixtures wildcard any named route
   for deterministic tests; replay resolves by request digest before
   routing, so verification never depends on live admissions.
 - An executor may suspend a run: declining a request with `EFFECT_SUSPENDED`
   (or exiting 75 from a command executor) records the attempt, marks the
-  cell `suspended`, and ends the run `suspended` — no retry, no fail edge.
+  cell `suspended`, and ends the run `suspended`: no retry, no fail edge.
   The suspended receipt still verifies bit-for-bit, and `algal resume`
   continues it: recorded effects replay by request digest, the suspended
   request re-issues against the currently admitted executors, and the tail
@@ -1115,13 +1145,13 @@ externally supplied results, resumption, strict replay, and journal recovery.
   mutates the live queue. Revoking either cap fails future uses closed.
 - An agent cell's context is declared, not ambient: `view.inputs` selects its
   edge-fed inputs, and `view.cells` names ancestor cells whose committed
-  records join the request under `context.cells` — optionally sliced to named
+  records join the request under `context.cells`, optionally sliced to named
   ports. Admission rejects non-ancestors and undeclared ports, so an agent
-  can never read a cell that hasn't run — the graph decides what the model
+  can never read a cell that hasn't run; the graph decides what the model
   sees.
 - An agent cell may declare `tools`: a bounded list of registry fns the
   executor may call back mid-activation. A `{"tool","inputs"}` response runs
-  the fn, appends to the request's `toolLog`, and re-issues the request —
+  the fn, appends to the request's `toolLog`, and re-issues the request,
   bounded by `budget.maxTurns` and counted against `maxAgentCalls`. This is
   how agents call functions inside the automaton without ambient authority.
 - The receipt records every committed/skipped/failed/suspended cell (with
@@ -1132,7 +1162,7 @@ externally supplied results, resumption, strict replay, and journal recovery.
   the same CAS through `ref` ports. The store is a seam: `MemoryStore` and
   `FileStore` (`.algal/`) ship now; a store backed by another database
   would implement the same ten methods. `pack`/`unpack` move a manifest's whole embedding
-  closure — sub-manifests and `const`-referenced payloads — between stores
+  closure, sub-manifests and `const`-referenced payloads, between stores
   as one verified bundle.
 - `run --cache-effects` memoizes effects across runs through the store's
   effect index: an identical request digest under the same executor cache
@@ -1140,25 +1170,25 @@ externally supplied results, resumption, strict replay, and journal recovery.
   new receipt). Scripted executors bind their whole response table into
   that identity; `command`, delegated-coding, and derived-index recall
   executors never memoize; and only contract-valid, in-budget,
-  non-tool-call outputs are stored — errors may be transient. `algal runs`
+  non-tool-call outputs are stored; errors may be transient. `algal runs`
   lists the receipts
   stored under `--dir`, and `algal manifests` / `manifest <digest>`
-  list and print the manifest CAS — including children admitted by
+  list and print the manifest CAS, including children admitted by
   `spawn`, so a `bred` journal's digests resolve to inspectable programs.
 
-## What not to infer
+## Boundaries
 
-- A successful receipt replay checks the recorded run for internal consistency.
-  It does not attest to a provider call, authenticate external facts, establish
-  that the model was right, or predict the next live execution.
-- `agent` cells carry no ambient authority. Model output is data until it
-  binds to a declared contract; an agent can use only capability handles
-  delivered through typed inputs and tools declared on that cell. Provider
-  access remains behind executors the host owns.
-- The process supervisor and mailbox scheduler are bounded local commands.
-  They provide durable records and exclusive dispatch; they do not provide a
-  hosted service, distributed consensus, OS isolation, automatic crash
-  reconciliation, or exactly-once arbitrary external effects.
+- A verified receipt shows that the recorded run is internally consistent and
+  that the effects it names were recorded. Whether the model was right is a
+  question for the evaluation step, which scores candidates on declared cases.
+- `agent` cells carry no ambient permission. Model output is data until it
+  binds to a declared contract; an agent uses only the handles delivered
+  through typed inputs and the tools declared on that cell. Provider access
+  stays behind executors the host owns.
+- The process supervisor and mailbox scheduler are local commands with durable
+  records and exclusive dispatch. Hosting, OS isolation, and exactly-once
+  external effects belong to the host application;
+  [algal.cloud](https://algal.cloud) is the hosted option.
 
 ## Plug it into your agent or provider
 
@@ -1196,12 +1226,12 @@ wrapping that method. `runOrganism` does the scheduling, binding, budget
 enforcement, and receipt writing. An executor declares the effect kinds it
 serves with `capabilities: { effects: [...] }`; undeclared executors default
 to `agent`/`classifier`, and `executorSupports` is the predicate the
-scheduler routes by — see the spec's executor matrix for the fail-closed
+scheduler routes by; see the spec's executor matrix for the fail-closed
 rules. Two optional refinements: `serves(request)` is a request-aware
 admission checked before routing (the replay executor uses it to serve
 exactly the request digests it holds, letting `resume` replay a prefix and
-run the tail live), and throwing `EFFECT_SUSPENDED` — or exiting 75 from a
-command executor — suspends the run into a resumable checkpoint.
+run the tail live), and throwing `EFFECT_SUSPENDED`, or exiting 75 from a
+command executor, suspends the run into a resumable checkpoint.
 
 ### From the CLI with any provider
 
@@ -1301,43 +1331,39 @@ The agent receives the output and a receipt digest it can verify later. See
 
 Receipts are content-addressed canonical JSON; `algal verify` replays them
 offline with the recorded effects fixed. `algal pack` exports a manifest
-closure — sub-manifests, `const` refs, and linked bundles — so one digest fully
+closure, sub-manifests, `const` refs, and linked bundles, so one digest fully
 describes a deployable program.
 
 ### Exit codes
 
 Both CLIs follow one rule. `0`: the command succeeded. `1`: the command ran and
-reported a negative result — a run that `failed` or `suspended`, a `verify`
+reported a negative result: a run that `failed` or `suspended`, a `verify`
 that found divergence, a `suite` with a failing example, a credential that is
-absent. `2`: the command could not run — a usage, parse, admission, I/O, or
+absent. `2`: the command could not run: a usage, parse, admission, I/O, or
 runtime error, printed to stderr as `{"error": <code>, "message": ...}` (the
 native CLI wraps it as `{"ok": false, "error": {...}}`).
 
-## How claims are checked
+## Check it yourself
 
 `bun run check` runs the typechecker, the linter, the test suite, and the site
-build. Tests cover manifest parsing and bounds, graph admission (cycles, type
-mismatches, guard validity, single-assignment), scheduler semantics (ordering,
+build. The tests cover manifest parsing and limits, graph checks (cycles, type
+mismatches, guard validity, single assignment), scheduler semantics (ordering,
 skips, budgets, nesting), the effect seam (digest binding, output binding,
-misses), capability-class isolation, mailbox quotas/revocation/idempotency,
-suspend/wake/resume, store tamper detection, and verify round trips including
-forged-output detection.
+misses), capability isolation, mailbox quotas, revocation, and idempotency,
+suspend, wake, and resume, store tamper detection, and verify round trips
+including forged-output detection. `algal verify` replays any receipt offline,
+and the [native release guide](docs/native-release.md#verify-and-install-by-hand)
+shows how to check a downloaded build by hand.
 
-## Deeper documentation
+## Documentation
 
-- [Vision](docs/vision.md) — software that accumulates competence: the bet, the four properties that make it testable, and the evidence that would justify it.
-- [Lineage](docs/lineage.md) — Lisp, Emacs, Smalltalk, Urbit, Engelbart, and the research precedents for evolving programs.
-- `spec/v1/organism.md` — the manifest, run, and receipt contract.
-- `spec/v1/foundry.md` — candidate generation, evidence, promotion, and verification.
-- `spec/v1/search.md` — bounded generations, feedback, survivors, and lineage.
-- `spec/v1/bench.md` — workload comparison, attribution, and the pareto claim.
-- [Malleable workbench](docs/malleable-workbench.md) — captured component state, ordered signals, causal inspection, controls and independently checked proposals.
-- [Local triage](docs/local-triage.md) — persistent tasks across browser, desktop and terminal, on-device workflow proposals, schema migration and explicit forks.
-- [Browser-local evolution](docs/browser-grow.md). Edit a marketing component, save its history in your browser, and reopen it offline. An optional WebGPU model can suggest changes. [Open the workspace](https://algal.computer/grow/).
-- [Browser tasks](docs/browser-tasks.md). Keep tasks and drafts offline, preview workflow changes, and add categories without losing task data. [Open the task workspace](https://algal.computer/tasks/).
-- [Coding-harness pilot](docs/coding-harness.md) — matched conventional/ALGAL loops, bounded policy proposals, and independent benchmark grading.
-- [Coding-harness memory spike](docs/coding-harness-memory-spike.md) — scoped observations, inspectable procedures, and native prerequisite proofs in an opt-in memory comparison.
-- `docs/` — design notes as they land.
+- Learn the language: [readable ALGAL source](docs/source-language.md), [building larger programs](docs/scaling-programs.md), [the shared program catalog](docs/library.md), and [program diagrams](docs/diagrams.md).
+- Run a program: [try the native VM](docs/native-workbench.md), [the process VM](docs/vm.md), [executors](docs/executors.md), and [practical workflows](docs/use-cases.md).
+- Pause, resume, and replay: [programs that wait](docs/vm.md#verify-a-process-away-from-its-original-host), [durable coding repairs](docs/repair.md), and [recover a retained coding outcome](docs/coding-operations.md).
+- Evolve programs: [declare, evaluate, and improve a task](docs/task-optimization.md), [habitats and self-reproduction](docs/habitats.md), and [the program database](docs/program-database.md).
+- Why ALGAL: [software that accumulates competence](docs/vision.md), [where ALGAL comes from](docs/lineage.md), [what distinguishes ALGAL](docs/why-unique.md), and [when ALGAL is useful](docs/when-algal-wins.md).
+- Contracts: [`spec/v1/organism.md`](spec/v1/organism.md) (manifest, run, and receipt), [`spec/v1/foundry.md`](spec/v1/foundry.md) (candidates, evidence, promotion), [`spec/v1/search.md`](spec/v1/search.md) (generations and survivors), [`spec/v1/bench.md`](spec/v1/bench.md) (workload comparison), and [`spec/v1/application.md`](spec/v1/application.md) (durable applications).
+- Applications: [follow a component to its evidence](docs/malleable-workbench.md), [a local application you can change](docs/local-triage.md), [an evolving component in your browser](docs/browser-grow.md) ([open it](https://algal.computer/grow/)), and [tasks that survive application changes](docs/browser-tasks.md) ([open it](https://algal.computer/tasks/)).
 
 ## Related work
 
@@ -1352,7 +1378,7 @@ pages](https://algal.computer/compare/) say when each tool is the better choice.
 ALGAL is a Hraness project. It shares conventions with Oh
 (content-addressed canonical records), `platonik` (bounded organisms and
 symbolization), Valhalla (authority boundaries and witness execution), and
-Excalibur (xcb), which owns execution custody and model routing, but it is
+Excalibur (xcb), which runs the agents and routes model calls, but it is
 standalone: the store and executor seams are where those foundations attach.
 
 ## License
