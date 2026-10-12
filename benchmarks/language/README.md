@@ -14,11 +14,13 @@ case identity and expectation to that corpus, and checks raw samples against
 summaries.
 
 The event-loop shape is specified in [`spec/v1/event-loop.md`](../../spec/v1/event-loop.md).
-The fixture test parses foreign JSON as `unknown`, rejects unknown keys, checks
-all fixture digests, and exercises the listed failure codes:
+The structural fixture test parses foreign JSON as `unknown`, rejects unknown
+keys, checks fixture digests, and exercises the listed failure codes. The
+fixture-admission path composes the post-schema event-sequence identity check
+after the event schema, byte, and digest checks:
 
 ```sh
-bun test benchmarks/language/contract.test.ts benchmarks/language/span.test.ts benchmarks/language/project-closure.test.ts
+bun test benchmarks/language
 ```
 
 ## Baseline layout
@@ -28,6 +30,8 @@ benchmarks/language/
   README.md
   corpus.json
   contract.test.ts
+  event-sequence.ts
+  event-sequence.test.ts
   project-closure.ts
   project-closure.test.ts
   span.ts
@@ -52,6 +56,12 @@ behavior fixtures each record a
 specific parser failure. Colocated tests also mutate copies of the valid
 fixtures to test digest, payload, byte-limit, and transition rejections. The
 fixture count is deliberately small for the P0 contract gate. It is not the 100-program corpus target in the north-star plan.
+
+`event-sequence.ts` checks one parsed event vector for conflicting reuse of a
+source/sequence key and marks identical redeliveries as duplicates. `parseEvents`
+in `contract.test.ts` runs it after structural, schema, byte, and digest checks.
+The [P0 decision and remaining delivery gates](P0-EVENT-IDENTITY-DECISION.md)
+record the choice and the limits of this fixture-only evidence.
 
 ## Architecture vocabulary
 

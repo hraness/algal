@@ -121,10 +121,17 @@ The following identities are stable and contain no clock value:
    "actor": actor.id, "source": source id, "sequence": sequence, "type":
    event type, "payload": payload }`. The source id is inside the digest, so
    two sources can use the same sequence without an identity collision.
+   Within one behavior revision and actor, `(source, sequence)` is a stable
+   logical-event key: its first admitted canonical `type` and `payload` bind
+   that key. Reuse with changed type or payload is an `EVENT_LOOP_ID` conflict,
+   not a newly admitted event, even though its full-content digest differs.
 3. A message identity is the digest of `{ "event": event identity, "target":
-   actor.id, "delivery": delivery identity }`. The same message id delivered
-   again is a duplicate. A duplicate records a no-op decision and does not run a
-   transition or emit a notification.
+   actor.id, "delivery": delivery identity }`. It identifies a delivery
+   attempt, not a second opportunity to settle the same logical event. An exact
+   repeat of a bound event is a duplicate even if the host assigns a different
+   delivery identity. A duplicate records a no-op decision and does not run a
+   transition or emit a notification. The host must retain the event-key binding
+   and the settled decision across delivery attempts and restarts.
 4. A notification receives a new event identity and a deterministic ordinal in
    its parent transition. The ordinal starts at zero for each transition. A
    notification cannot reuse its parent's message id.
@@ -134,10 +141,13 @@ The following identities are stable and contain no clock value:
    hosts must present the same logical order or produce separate traces; this
    contract does not claim that an arbitrary distributed scheduler is ordered.
 
-A verifier compares identities before values. It rejects a repeated identity with
-changed content, a sequence outside the declared integer range, a notification
-that is not listed by its parent transition, or a trace that skips a required
-parent decision. External effects are at-most-once claims only when their host
+A verifier compares identities before values. It rejects reuse of a bound
+logical-event key with changed content, a sequence outside the declared integer
+range, a notification that is not listed by its parent transition, or a trace
+that skips a required parent decision. A conflict is not a duplicate and cannot
+commit a transition. Event-vector checks enforce this rule within their bounded
+vector; a host and trace verifier must enforce it against retained earlier
+entries as well. External effects are at-most-once claims only when their host
 adapter supplies a matching idempotency record. This contract does not claim
 exactly-once behavior for arbitrary external systems.
 
@@ -226,9 +236,12 @@ It contains 1 to 256 events. Each event is a closed object with `source`,
 its sequence is an integer from 0 to 2,147,483,647. The type must name a
 declared event. The payload must have exactly its required, typed schema fields.
 The canonical UTF-8 bytes of the *complete event object*, including the
-payload, must fit `maxEventBytes`. The vector digest covers the canonical root
-without its `digest` key. A checker verifies the behavior first, then the
-vector and its digest; it does not accept an event vector alone.
+payload, must fit `maxEventBytes`. A repeated `(source, sequence)` within this
+actor's vector must have the same canonical type and payload; an identical
+repeat is a duplicate, and changed content is `EVENT_LOOP_ID` at the repeated
+sequence. The vector digest covers the canonical root without its `digest` key.
+A checker verifies the behavior first, then the vector and its digest; it does
+not accept an event vector alone.
 
 The event and actor id sets are global within one behavior. An output may name
 only a declared event and an existing actor id or the literal target `self`.
@@ -265,8 +278,9 @@ A transition is a closed object with `id`, `on`, `when`, `writes`, `outputs`, an
 For one event, guards are evaluated in transition id order. The first true guard
 wins. A behavior cannot rely on object insertion order. If no guard matches, the
 host records `no-transition` and leaves state unchanged. A malformed payload,
-unknown event, duplicate message, fuel exhaustion, or bound failure also leaves
-state unchanged. The evaluator never partially commits a state write or output.
+unknown event, duplicate event (including a redelivery under a new delivery id),
+conflicting event key, fuel exhaustion, or bound failure leaves state unchanged.
+The evaluator never partially commits a state write or output.
 
 Backpressure is part of the host protocol, not a hidden transition. A host
 accepts at most `maxMailboxDepth` pending messages. It must return one of
@@ -282,11 +296,11 @@ recorded effect. It must not contain `createdAt`, `updatedAt`, a timestamp,
 random host identifiers, a process address, or a provider credential.
 
 A replay verifier loads the behavior, then processes entries in order. It checks
-message identity, payload schema, guard and expression results, fuel, state
-bytes, output identities, and the recorded outcome. A replay can prove that the
-recorded transition is internally consistent. It cannot prove that a provider
-returned a truthful answer or that a future external effect will have the same
-result.
+message identity, the retained event-key binding, payload schema, guard and
+expression results, fuel, state bytes, output identities, and the recorded
+outcome. A replay can prove that the recorded transition is internally
+consistent. It cannot prove that a provider returned a truthful answer or that
+a future external effect will have the same result.
 
 Trace storage and an eventual event-loop trace wire contract are intentionally
 separate from this behavior envelope. P1 may add that record only by reusing

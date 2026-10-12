@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { checkProgram, EXPR_BOUNDS } from "../../src/expr";
 import { canonicalize, isJsonValue, type JsonValue } from "../../src/values";
 import { locateJsonSpan, type ByteSpan } from "./span";
+import { checkEventSequence, EventSequenceError } from "./event-sequence";
 import { isProjectPath, ProjectClosureError, verifyProjectClosure } from "./project-closure";
 
 const ROOT = import.meta.dir;
@@ -382,7 +383,7 @@ function parseEventLoop(value: unknown): RecordValue {
   return root;
 }
 
-function parseEvents(value: unknown, behaviorValue: unknown): RecordValue {
+function parseEvents(value: unknown, behaviorValue: unknown): { value: RecordValue; duplicates: number[] } {
   const behavior = parseEventLoop(behaviorValue);
   const limits = object(behavior.limits, "behavior.limits");
   const declarations = new Map<string, Map<string, string>>();
@@ -416,7 +417,17 @@ function parseEvents(value: unknown, behaviorValue: unknown): RecordValue {
     }
   }
   verifyDigest(root, "events");
-  return root;
+  // Schema, byte limits, and the whole-vector digest are checked above before
+  // binding a source/sequence to its first admitted type and payload.
+  try {
+    const { duplicates } = checkEventSequence(
+      root.events as { source: string; sequence: number; type: string; payload: JsonValue }[],
+    );
+    return { value: root, duplicates };
+  } catch (error) {
+    if (error instanceof EventSequenceError) fail(error.code, error.message, error.at);
+    throw error;
+  }
 }
 
 function path(value: unknown, what: string, at?: readonly (string | number)[]): string {
@@ -1314,6 +1325,39 @@ describe("language benchmark contract fixtures", () => {
     limits.maxEventBytes = 65_537;
     actor.digest = canonicalDigest(withoutDigest(actor));
     expect(errorCode(() => parseEvents(events, actor))).toBe("EVENT_LOOP_BOUNDS");
+  });
+
+  test("event-vector admission rejects re-digested key conflicts but accepts identical redelivery", async () => {
+    const actor = await load("actors/echo.json");
+    const base = object(await load("actors/echo.events.json"), "events");
+    const first = object((base.events as unknown[])[0], "first event");
+    const admit = (last: RecordValue): RecordValue => {
+      const vector = structuredClone(base) as RecordValue;
+      vector.events = [...vector.events as unknown[], last];
+      vector.digest = canonicalDigest(withoutDigest(vector));
+      expect(vector.digest).not.toBe(base.digest);
+      return vector;
+    };
+    for (const changed of [
+      { ...first, payload: { amount: 4 } },
+      { ...first, type: "reset", payload: {} },
+    ]) {
+      const vector = admit(changed);
+      try {
+        parseEvents(vector, actor);
+        throw new Error("re-digested event-key conflict was accepted");
+      } catch (error) {
+        if (!(error instanceof FixtureError)) throw error;
+        expect(error.code).toBe("EVENT_LOOP_ID");
+        expect(error.at).toEqual(["events", 3, "sequence"]);
+      }
+    }
+    const duplicate = admit({ ...first, payload: { amount: 2 } });
+    expect(parseEvents(duplicate, actor).duplicates).toEqual([3]);
+    expect(parseEvents(base, actor).duplicates).toEqual([]);
+    // An invalid schema cannot be hidden behind a conflicting logical key.
+    const invalid = admit({ ...first, type: "reset", payload: { amount: 4 } });
+    expect(errorCode(() => parseEvents(invalid, actor))).toBe("EVENT_LOOP_UNKNOWN_KEY");
   });
 
   test("complete initial state is limited and v1 writes address one field", async () => {
