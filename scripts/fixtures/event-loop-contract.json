@@ -95,6 +95,8 @@
     { "name": "accept-full", "path": "/entries/0/depthBefore", "value": 64, "code": "EVENT_LOOP_SEMANTIC" },
     { "name": "backpressure-not-full", "path": "/entries/2/depthBefore", "value": 63, "code": "EVENT_LOOP_SEMANTIC" },
     { "name": "missing-receipt", "path": "/entries/0/decision/effects/settled", "value": 1, "code": "EVENT_LOOP_BOUNDS" },
+    { "name": "pure-transition-effect", "path": "/entries/0/decision/effects/requested", "value": 1, "code": "EVENT_LOOP_SEMANTIC" },
+    { "name": "quiet-transition-effect", "path": "/entries/3/decision/effects/requested", "value": 1, "code": "EVENT_LOOP_SEMANTIC" },
     { "name": "resource-output-mismatch", "path": "/entries/0/decision/resources/outputEvents", "value": 0, "code": "EVENT_LOOP_SEMANTIC" },
     { "name": "quiet-with-output", "path": "/entries/0/decision/outcome", "value": "quiet", "code": "EVENT_LOOP_SEMANTIC" },
     { "name": "no-transition-with-id", "path": "/entries/3/decision/outcome", "value": "no-transition", "code": "EVENT_LOOP_SEMANTIC" },
@@ -107,6 +109,7 @@
   "invalidFailed": [
     { "name": "failed-unknown-reason", "path": "/entries/1/decision/reason", "value": "timeout", "code": "EVENT_LOOP_SEMANTIC" },
     { "name": "failed-changed-state", "path": "/entries/1/decision/stateDigest", "value": "sha256:0000000000000000000000000000000000000000000000000000000000000000", "code": "EVENT_LOOP_SEMANTIC" },
+    { "name": "failed-changed-state-bytes", "path": "/entries/1/decision/resources/stateBytes", "value": 10, "code": "EVENT_LOOP_SEMANTIC" },
     { "name": "failed-output", "path": "/entries/1/decision/resources/outputEvents", "value": 1, "code": "EVENT_LOOP_SEMANTIC" },
     { "name": "failed-over-fuel", "path": "/entries/1/decision/resources/fuel", "value": 1001, "code": "EVENT_LOOP_BOUNDS" },
     { "name": "failed-full", "path": "/entries/1/depthBefore", "value": 64, "code": "EVENT_LOOP_SEMANTIC" },

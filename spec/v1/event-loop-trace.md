@@ -62,17 +62,26 @@ The closed `decision` object has one of these shapes:
   `no-transition` cannot list outputs. When an earlier accepted decision
   recorded a state digest, pending and unmatched outcomes must keep it.
 
-`effects` is a closed summary `{requested, settled, receipts}`. Both counts
-are integers from 0 to 64; `settled` cannot exceed `requested`, and `receipts`
-contains exactly `settled` digests. Deferred, escalated, and unmatched
-transitions have zero requested effects. `resources` is a closed summary
-`{fuel, stateBytes, outputEvents}` with integer ranges 0 to
-`limits.maxTransitionFuel` (at most 100,000), 0 to `limits.maxStateBytes` (at
-most 262,144), and 0 to `limits.maxOutputEvents` (at most 64).
-`outputEvents` equals `outputs.length` for an accepted decision and is zero
-for a failed decision. These are recorded claims, not measurements or proof
-of an external side effect; a receipt digest alone cannot establish that a
-provider returned a truthful answer.
+`effects` is a closed summary `{requested, settled, receipts}`. In this v1
+proposal, both counts must be zero and `receipts` must be empty. P0 transitions
+are pure: a notification is data, while deferral and escalation are pending
+requests, not completed host calls. A nonzero request with otherwise valid
+bounds fails with `EVENT_LOOP_SEMANTIC`. The general count checks still reject
+numbers outside 0 to 64, `settled` above `requested`, and a `receipts` list
+whose length differs from `settled`. No trace entry may claim that a fast
+transition performed an external effect.
+
+`resources` is a closed summary `{fuel, stateBytes, outputEvents}` with integer
+ranges 0 to `limits.maxTransitionFuel` (at most 100,000), 0 to
+`limits.maxStateBytes` (at most 262,144), and 0 to
+`limits.maxOutputEvents` (at most 64). `outputEvents` equals `outputs.length`
+for an accepted decision and is zero for a failed decision. When a decision
+repeats the most recently accepted state digest, its `stateBytes` must match
+that decision's size, including for failed, pending, and unmatched decisions.
+This only checks consistency with the latest state in the trace, not whether
+the digest or size describes an actual state. Fuel and state-size figures are
+recorded claims, not measurements; a trace digest does not establish the truth
+of a host observation.
 
 The parser rejects invalid shapes with the `EVENT_LOOP_*` codes from the
 [event-loop contract](event-loop.md#errors-and-versioning), including
@@ -80,6 +89,6 @@ The parser rejects invalid shapes with the `EVENT_LOOP_*` codes from the
 `scripts/fixtures/event-loop-contract.json` checks both implementations with
 the same valid and invalid trace values. Neither implementation schedules
 actors, performs host calls, checks state transitions, verifies notifications,
-or proves an effect or resource count. A future replay verifier must join
-this trace to a checked behavior, retained earlier bindings, and an effect
-adapter's idempotency records. This proposal does not complete the P1 gate.
+or proves a resource count. A future replay verifier must join this trace to a
+checked behavior, retained earlier bindings, and an effect adapter's
+idempotency records. This proposal does not complete the P1 gate.

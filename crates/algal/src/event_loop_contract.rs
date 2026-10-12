@@ -154,7 +154,7 @@ pub fn parse_event_loop_trace(value: &Value) -> Result<String> {
     let max_mailbox = number(&limits["maxMailboxDepth"], 1, 1_024)?;
     let entries = list(&value["entries"], 1, 256)?;
     let mut bound = BTreeMap::new();
-    let mut last_state: Option<&str> = None;
+    let mut last_state: Option<(&str, usize)> = None;
     for entry in entries {
         closed(
             entry,
@@ -249,8 +249,11 @@ pub fn parse_event_loop_trace(value: &Value) -> Result<String> {
                     id(&decision["transition"])?;
                 }
                 let state = sha(&decision["stateDigest"])?;
-                if resources(&decision["resources"], max_fuel, max_state, max_output)? != 0
-                    || last_state.is_some_and(|old| old != state)
+                let output_events =
+                    resources(&decision["resources"], max_fuel, max_state, max_output)?;
+                let state_bytes = number(&decision["resources"]["stateBytes"], 0, max_state)?;
+                if output_events != 0
+                    || last_state.is_some_and(|(old, size)| old != state || size != state_bytes)
                 {
                     return Err(error("EVENT_LOOP_SEMANTIC"));
                 }
@@ -283,20 +286,28 @@ pub fn parse_event_loop_trace(value: &Value) -> Result<String> {
                 for receipt in list(&effects["receipts"], settled, settled)? {
                     sha(receipt)?;
                 }
-                if resources(&decision["resources"], max_fuel, max_state, max_output)?
-                    != outputs.len()
-                {
+                // P0 transitions are pure. Notifications are data, and pending
+                // requests do not establish external effect completion.
+                if requested != 0 {
+                    return Err(error("EVENT_LOOP_SEMANTIC"));
+                }
+                let output_events =
+                    resources(&decision["resources"], max_fuel, max_state, max_output)?;
+                let state_bytes = number(&decision["resources"]["stateBytes"], 0, max_state)?;
+                if output_events != outputs.len() {
                     return Err(error("EVENT_LOOP_SEMANTIC"));
                 }
                 if matches!(outcome, "quiet" | "defer" | "escalate" | "no-transition")
                     && !outputs.is_empty()
                     || matches!(outcome, "defer" | "escalate" | "no-transition") && requested > 0
                     || matches!(outcome, "defer" | "escalate" | "no-transition")
-                        && last_state.is_some_and(|old| old != state)
+                        && last_state.is_some_and(|(old, _)| old != state)
+                    // A repeated state digest also fixes its canonical byte length.
+                    || last_state.is_some_and(|(old, size)| old == state && size != state_bytes)
                 {
                     return Err(error("EVENT_LOOP_SEMANTIC"));
                 }
-                last_state = Some(state);
+                last_state = Some((state, state_bytes));
                 bound.insert(key, content);
             }
         }

@@ -45,10 +45,31 @@ test("logical key rejects re-digested changes, while overflow does not bind a ke
   expect(code(seal(admitted))).toBe("EVENT_LOOP_ID");
 });
 
-test("identity, receipt, and resource summaries are claims, not host calls", () => {
+test("pure transitions cannot claim external effects", () => {
+  for (const outcome of ["continue", "quiet", "defer", "escalate", "no-transition"]) {
+    const trace = clone();
+    const decision = trace.entries[3].decision;
+    decision.outcome = outcome;
+    if (outcome === "no-transition") decision.transition = null;
+    if (["defer", "escalate", "no-transition"].includes(outcome)) {
+      decision.stateDigest = trace.entries[0].decision.stateDigest;
+    }
+    expect(code(seal(trace))).toBe("ACCEPTED");
+    decision.effects.requested = 1;
+    expect(code(seal(trace))).toBe("EVENT_LOOP_SEMANTIC");
+    decision.effects.requested = 0;
+    decision.effects.settled = 1;
+    expect(code(seal(trace))).toBe("EVENT_LOOP_BOUNDS");
+    decision.effects.settled = 0;
+    decision.effects.receipts.push(hash({effect: "unclaimed"}));
+    expect(code(seal(trace))).toBe("EVENT_LOOP_BOUNDS");
+  }
+});
+
+test("identity and resource summaries are claims, not host calls", () => {
   const trace = clone();
   const accepted = trace.entries[0].decision;
-  accepted.effects = {requested: 1, settled: 1, receipts: [hash({effect: "local"})]};
+  accepted.effects = {requested: 0, settled: 0, receipts: []};
   expect(code(seal(trace))).toBe("ACCEPTED");
   accepted.effects.receipts.push(hash(null));
   expect(code(seal(trace))).toBe("EVENT_LOOP_BOUNDS");
@@ -70,12 +91,14 @@ test("failed delivery binds its key, keeps state, and cannot claim outputs or ef
   decision.transition = "x".repeat(64);
   decision.resources.fuel = 0;
   decision.resources.stateBytes = 0;
+  expect(code(seal(failed))).toBe("EVENT_LOOP_SEMANTIC");
+  decision.resources.stateBytes = 11;
   expect(code(seal(failed))).toBe("ACCEPTED");
   decision.transition += "x";
   expect(code(seal(failed))).toBe("EVENT_LOOP_ID");
   decision.transition = null;
   decision.resources.stateBytes = failed.limits.maxStateBytes;
-  expect(code(seal(failed))).toBe("ACCEPTED");
+  expect(code(seal(failed))).toBe("EVENT_LOOP_SEMANTIC");
   decision.resources.stateBytes++;
   expect(code(seal(failed))).toBe("EVENT_LOOP_BOUNDS");
   decision.resources.stateBytes = 11;
@@ -90,6 +113,13 @@ test("failed delivery binds its key, keeps state, and cannot claim outputs or ef
   decision.stateDigest = failed.entries[0].decision.stateDigest;
   failed.entries[2].payload.amount++;
   expect(code(seal(failed))).toBe("EVENT_LOOP_ID");
+  // The first decision has no previous state to compare; its byte limit still applies.
+  const first = structuredClone(fixture.failed);
+  first.entries.shift();
+  first.entries[0].decision.resources.stateBytes = first.limits.maxStateBytes;
+  expect(code(seal(first))).toBe("ACCEPTED");
+  first.entries[0].decision.resources.stateBytes++;
+  expect(code(seal(first))).toBe("EVENT_LOOP_BOUNDS");
 });
 
 test("pending and unmatched decisions cannot change previously recorded state", () => {
@@ -101,7 +131,19 @@ test("pending and unmatched decisions cannot change previously recorded state", 
     expect(code(seal(trace))).toBe("EVENT_LOOP_SEMANTIC");
     decision.stateDigest = trace.entries[0].decision.stateDigest;
     expect(code(seal(trace))).toBe("ACCEPTED");
+    decision.resources.stateBytes = 10;
+    expect(code(seal(trace))).toBe("EVENT_LOOP_SEMANTIC");
   }
+});
+
+test("unchanged digest fixes byte length even when a new transition is accepted", () => {
+  const trace = clone();
+  trace.entries[3].decision.stateDigest = trace.entries[0].decision.stateDigest;
+  expect(code(seal(trace))).toBe("ACCEPTED");
+  trace.entries[3].decision.resources.stateBytes = 10;
+  expect(code(seal(trace))).toBe("EVENT_LOOP_SEMANTIC");
+  trace.entries[3].decision.resources.stateBytes = 11;
+  expect(code(seal(trace))).toBe("ACCEPTED");
 });
 
 test("count and declared byte limits enforce both edges and first excess", () => {

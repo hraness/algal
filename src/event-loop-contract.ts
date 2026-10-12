@@ -120,6 +120,7 @@ export function parseEventLoopTrace(value: unknown): { digest: string; entries: 
   const entries = list(root.entries, 1, 256);
   const bound = new Map<string, string>();
   let lastState: string | undefined;
+  let lastStateBytes: number | undefined;
   for (const entry of entries) {
     const item = row(entry, ["source", "sequence", "type", "payload", "delivery", "eventDigest", "messageDigest", "depthBefore", "decision"]);
     const source = id(item.source);
@@ -155,8 +156,9 @@ export function parseEventLoopTrace(value: unknown): { digest: string; entries: 
         const state = digest(decision.stateDigest);
         const resources = row(decision.resources, ["fuel", "stateBytes", "outputEvents"]);
         int(resources.fuel, 0, maxFuel);
-        int(resources.stateBytes, 0, maxState);
-        if (int(resources.outputEvents, 0, maxOutput) !== 0 || (lastState !== undefined && state !== lastState)) fail("EVENT_LOOP_SEMANTIC");
+        const stateBytes = int(resources.stateBytes, 0, maxState);
+        if (int(resources.outputEvents, 0, maxOutput) !== 0 ||
+            (lastState !== undefined && (state !== lastState || stateBytes !== lastStateBytes))) fail("EVENT_LOOP_SEMANTIC");
         bound.set(key, content);
         continue;
       }
@@ -172,14 +174,21 @@ export function parseEventLoopTrace(value: unknown): { digest: string; entries: 
       const settled = int(effects.settled, 0, requested);
       const receipts = list(effects.receipts, settled, settled);
       receipts.forEach(digest);
+      // P0 transitions are pure. Notifications are data, and defer/escalate
+      // are pending requests, not completed external effects.
+      if (requested !== 0) fail("EVENT_LOOP_SEMANTIC");
       const resources = row(decision.resources, ["fuel", "stateBytes", "outputEvents"]);
       int(resources.fuel, 0, maxFuel);
-      int(resources.stateBytes, 0, maxState);
+      const stateBytes = int(resources.stateBytes, 0, maxState);
       if (int(resources.outputEvents, 0, maxOutput) !== outputs.length) fail("EVENT_LOOP_SEMANTIC");
       if (["quiet", "defer", "escalate", "no-transition"].includes(outcome) && outputs.length > 0) fail("EVENT_LOOP_SEMANTIC");
       if (["defer", "escalate", "no-transition"].includes(outcome) && requested > 0) fail("EVENT_LOOP_SEMANTIC");
       if (["defer", "escalate", "no-transition"].includes(outcome) && lastState !== undefined && state !== lastState) fail("EVENT_LOOP_SEMANTIC");
+      // Only compare byte claims when the state digest matches the latest
+      // accepted state in this trace; earlier nonadjacent states are not checked.
+      if (lastState === state && stateBytes !== lastStateBytes) fail("EVENT_LOOP_SEMANTIC");
       lastState = state;
+      lastStateBytes = stateBytes;
       bound.set(key, content);
     }
   }

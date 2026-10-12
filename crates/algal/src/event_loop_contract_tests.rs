@@ -93,12 +93,42 @@ fn event_loop_contract_bounds_and_overflow_does_not_bind() {
     seal(&mut trace);
     assert_eq!(code(&trace), "EVENT_LOOP_ID");
     let mut trace = base;
-    trace["entries"][0]["decision"]["effects"] =
-        json!({"requested":1,"settled":1,"receipts":[digest(&json!("effect")).unwrap()]});
+    trace["entries"][0]["decision"]["effects"] = json!({"requested":1,"settled":0,"receipts":[]});
     seal(&mut trace);
-    assert_eq!(code(&trace), "ACCEPTED");
+    assert_eq!(code(&trace), "EVENT_LOOP_SEMANTIC");
     trace["entries"][0]["decision"]["effects"]["settled"] = json!(2);
     assert_eq!(code(&trace), "EVENT_LOOP_BOUNDS");
+}
+
+#[test]
+fn event_loop_contract_pure_outcomes_reject_effect_claims() {
+    let base = fixture()["base"].clone();
+    for outcome in ["continue", "quiet", "defer", "escalate", "no-transition"] {
+        let mut trace = base.clone();
+        let first_state = trace["entries"][0]["decision"]["stateDigest"].clone();
+        let decision = &mut trace["entries"][3]["decision"];
+        decision["outcome"] = json!(outcome);
+        if outcome == "no-transition" {
+            decision["transition"] = Value::Null;
+        }
+        if matches!(outcome, "defer" | "escalate" | "no-transition") {
+            decision["stateDigest"] = first_state;
+        }
+        seal(&mut trace);
+        assert_eq!(code(&trace), "ACCEPTED", "{outcome}");
+        trace["entries"][3]["decision"]["effects"]["requested"] = json!(1);
+        seal(&mut trace);
+        assert_eq!(code(&trace), "EVENT_LOOP_SEMANTIC", "{outcome}");
+        trace["entries"][3]["decision"]["effects"]["requested"] = json!(0);
+        trace["entries"][3]["decision"]["effects"]["settled"] = json!(1);
+        seal(&mut trace);
+        assert_eq!(code(&trace), "EVENT_LOOP_BOUNDS", "{outcome}");
+        trace["entries"][3]["decision"]["effects"]["settled"] = json!(0);
+        trace["entries"][3]["decision"]["effects"]["receipts"] =
+            json!([digest(&json!("unclaimed")).unwrap()]);
+        seal(&mut trace);
+        assert_eq!(code(&trace), "EVENT_LOOP_BOUNDS", "{outcome}");
+    }
 }
 
 #[test]
@@ -114,14 +144,45 @@ fn event_loop_contract_failed_decision_keeps_state_and_bounds_summaries() {
         trace["entries"][1]["decision"]["reason"] = json!(reason);
         trace["entries"][1]["decision"]["transition"] = json!("increment");
         trace["entries"][1]["decision"]["resources"]["fuel"] = json!(0);
-        trace["entries"][1]["decision"]["resources"]["stateBytes"] = json!(16_384);
+        trace["entries"][1]["decision"]["resources"]["stateBytes"] = json!(0);
+        seal(&mut trace);
+        assert_eq!(code(&trace), "EVENT_LOOP_SEMANTIC");
+        trace["entries"][1]["decision"]["resources"]["stateBytes"] = json!(11);
         seal(&mut trace);
         assert_eq!(code(&trace), "ACCEPTED");
+        trace["entries"][1]["decision"]["resources"]["stateBytes"] = json!(16_384);
+        assert_eq!(code(&trace), "EVENT_LOOP_SEMANTIC");
         trace["entries"][1]["decision"]["resources"]["stateBytes"] = json!(16_385);
         assert_eq!(code(&trace), "EVENT_LOOP_BOUNDS");
     }
-    let mut trace = base;
+    let mut trace = base.clone();
     assert_eq!(code(&trace), "ACCEPTED");
     trace["entries"][1]["decision"]["resources"]["outputEvents"] = json!(1);
     assert_eq!(code(&trace), "EVENT_LOOP_SEMANTIC");
+    // Before the first accepted state, the declared byte upper bound still applies.
+    let mut first = base;
+    first["entries"].as_array_mut().unwrap().remove(0);
+    first["entries"][0]["decision"]["resources"]["stateBytes"] = json!(16_384);
+    seal(&mut first);
+    assert_eq!(code(&first), "ACCEPTED");
+    first["entries"][0]["decision"]["resources"]["stateBytes"] = json!(16_385);
+    assert_eq!(code(&first), "EVENT_LOOP_BOUNDS");
+}
+
+#[test]
+fn event_loop_contract_same_state_fixes_accepted_and_pending_byte_length() {
+    let base = fixture()["base"].clone();
+    for outcome in ["continue", "quiet", "defer", "escalate", "no-transition"] {
+        let mut trace = base.clone();
+        trace["entries"][3]["decision"]["outcome"] = json!(outcome);
+        if outcome == "no-transition" {
+            trace["entries"][3]["decision"]["transition"] = Value::Null;
+        }
+        trace["entries"][3]["decision"]["stateDigest"] =
+            trace["entries"][0]["decision"]["stateDigest"].clone();
+        seal(&mut trace);
+        assert_eq!(code(&trace), "ACCEPTED", "{outcome}");
+        trace["entries"][3]["decision"]["resources"]["stateBytes"] = json!(10);
+        assert_eq!(code(&trace), "EVENT_LOOP_SEMANTIC", "{outcome}");
+    }
 }
