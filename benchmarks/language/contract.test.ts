@@ -307,6 +307,7 @@ function parseActor(
     }
     if (transition.when !== null) expression(transition.when, `transition ${transitionId}.when`, [...transitionAt, "when"]);
     if (!Array.isArray(transition.writes) || transition.writes.length > 64) fail("EVENT_LOOP_BOUNDS", `transition ${transitionId}.writes`, [...transitionAt, "writes"]);
+    const writtenFields = new Set<string>();
     for (const [writeIndex, rawWrite] of transition.writes.entries()) {
       const writeAt = [...transitionAt, "writes", writeIndex];
       const write = object(rawWrite, `transition ${transitionId}.writes[${writeIndex}]`, writeAt);
@@ -318,6 +319,9 @@ function parseActor(
         fail("EVENT_LOOP_REFERENCE", `transition ${transitionId}.state field`, [...writeAt, "path", 0]);
       }
       for (const [pathIndex, segment] of write.path.entries()) identifier(segment, `transition ${transitionId}.path[${pathIndex}]`, [...writeAt, "path", pathIndex]);
+      const field = write.path[0] as string;
+      if (writtenFields.has(field)) fail("EVENT_LOOP_SEMANTIC", `transition ${transitionId} repeats state field ${field}`, [...writeAt, "path"]);
+      writtenFields.add(field);
       expression(write.value, `transition ${transitionId}.value`, [...writeAt, "value"]);
     }
     if (!Array.isArray(transition.outputs) || transition.outputs.length > 64) {
@@ -1387,6 +1391,31 @@ describe("language benchmark contract fixtures", () => {
     write.path = [];
     actor.digest = canonicalDigest(withoutDigest(actor));
     expect(errorCode(() => parseEventLoop(actor))).toBe("EVENT_LOOP_BOUNDS");
+  });
+
+  test("writes to distinct fields are valid, but a repeated field is rejected", async () => {
+    const actor = structuredClone(await load("actors/echo.json")) as RecordValue;
+    const firstActor = object((actor.actors as unknown[])[0], "actor");
+    const state = object(firstActor.state, "state");
+    (state.fields as unknown[]).push({ name: "total", type: "number", initial: 0 });
+    const transition = object((firstActor.transitions as unknown[])[0], "transition");
+    const writes = transition.writes as unknown[];
+    const secondWrite = structuredClone(writes[0]) as RecordValue;
+    secondWrite.path = ["total"];
+    writes.push(secondWrite);
+    actor.digest = canonicalDigest(withoutDigest(actor));
+    expect(errorCode(() => parseEventLoop(actor))).toBe("ACCEPTED");
+
+    secondWrite.path = ["count"];
+    actor.digest = canonicalDigest(withoutDigest(actor));
+    try {
+      parseEventLoop(actor);
+      throw new Error("a repeated state field was accepted");
+    } catch (error) {
+      if (!(error instanceof FixtureError)) throw error;
+      expect(error.code).toBe("EVENT_LOOP_SEMANTIC");
+      expect(error.at).toEqual(["actors", 0, "transitions", 0, "writes", 1, "path"]);
+    }
   });
 
   test("quiet forbids outputs, and sources cannot collide in event identity", async () => {

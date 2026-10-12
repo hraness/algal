@@ -262,6 +262,9 @@ A transition is a closed object with `id`, `on`, `when`, `writes`, `outputs`, an
   v1, represented as a one-element list. A nested path is rejected in v1; a
   future revision must explicitly define any nested-write semantics. `value` is an
   `algal.expr.v1` envelope over `{ "state", "event" }`.
+  A transition may write each declared field at most once: a repeated path is
+  rejected at admission with `EVENT_LOOP_SEMANTIC` at the second `path`. Distinct
+  fields may be written together; separate transitions may write the same field.
   Writes are evaluated against the pre-transition state and are committed as one
   record after all expressions pass.
 - Each output is `{ "kind": "notify", "target", "event", "payload" }`.
@@ -332,7 +335,8 @@ The portable parser reports one stable code for the first failure:
 `EVENT_LOOP_BOUNDS` for a count, byte, depth, or fuel limit,
 `EVENT_LOOP_SCHEMA` for an invalid field type or initial value,
 `EVENT_LOOP_REFERENCE` for an unknown event, actor, state field, or expression
-name, and `EVENT_LOOP_SEMANTIC` for an invalid transition outcome.
+name, and `EVENT_LOOP_SEMANTIC` for an invalid transition outcome or repeated
+write path within one transition.
 The P0 byte-fixture checker maps malformed JSON and invalid UTF-8 to
 `EVENT_LOOP_PARSE`. Since these and a non-object JSON root have no contract
 field path, their diagnostic spans cover the complete source (1 to 16,384
