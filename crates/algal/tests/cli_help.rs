@@ -31,7 +31,7 @@ fn root_help_leads_with_first_run_commands_and_hides_research_ones() {
     assert!(output.status.success());
     let help = text(&output.stdout);
     assert!(help.starts_with(
-        "ALGAL is a programming language and VM where agent work becomes typed, tested, reusable procedures that wait for approval, survive crashes, and leave receipts you can replay.\n"
+        "ALGAL is a programming language for agents. Programs pause for approvals, survive restarts, replay from recorded effects, and improve through evaluation.\n"
     ));
     let commands: Vec<&str> = help
         .lines()

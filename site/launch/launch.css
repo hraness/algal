@@ -74,7 +74,7 @@
   color: inherit;
   border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
 }
-.al-report__done { color: #33a06f; font-weight: 700; }
+.al-report__done { color: var(--buncss-light, #1f7a50) var(--buncss-dark, #4fbf85); font-weight: 700; }
 .al-report__history li {
   display: grid;
   grid-template-columns: 7rem 5.5rem 1fr;
