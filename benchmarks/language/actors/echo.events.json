@@ -1,0 +1,29 @@
+{
+  "contract": "algal.event-loop.events.v1",
+  "actor": "counter",
+  "events": [
+    {
+      "source": "fixture",
+      "sequence": 0,
+      "type": "increment",
+      "payload": {
+        "amount": 2
+      }
+    },
+    {
+      "source": "fixture",
+      "sequence": 1,
+      "type": "increment",
+      "payload": {
+        "amount": 3
+      }
+    },
+    {
+      "source": "fixture",
+      "sequence": 2,
+      "type": "reset",
+      "payload": {}
+    }
+  ],
+  "digest": "sha256:1869ff89ddc5785172505954b7b19278ee716b96c2e86c538b2cd6756e9dbce9"
+}
