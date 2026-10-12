@@ -793,7 +793,7 @@ await writeFile(join(authoringDownloadDirectory, "diagnostic.json"), `${JSON.str
 
 // Render each page fragment inside the shared document, then apply the
 // measured placeholders across the whole emitted document.
-replacements.BUILD_STATS = `${verifiedRuns} recorded runs replay-verified in this build`;
+replacements.BUILD_STATS = `${verifiedRuns} recorded runs replayed for this build`;
 // Page names by path, for the 404 page's "Did you mean" suggestion. The
 // shared status page takes labels of at most 48 characters.
 const routeLabels = new Map<string, string>();

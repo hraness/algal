@@ -9,8 +9,8 @@ import {
   assertArticleAdmissions,
   isArticleIndexable,
   isArticleIsoDate,
+  formatArticleDate,
   renderArticleHtml,
-  renderArticleIndexHtml,
   renderArticleRelatedHtml,
   renderArticleSourcesHtml,
   type ArticleAdmission,
@@ -179,7 +179,6 @@ export function renderPostArticle(post: BlogPost): string {
   const after = renderArticleSourcesHtml({ sources, showDates: false }) + renderArticleRelatedHtml({ items: related });
   return renderArticleHtml({
     heading: post.title,
-    showDates: false,
     dek: post.dek,
     ...(post.eyebrow ? { eyebrow: post.eyebrow } : {}),
     author: BLOG_AUTHOR,
@@ -191,17 +190,26 @@ export function renderPostArticle(post: BlogPost): string {
   });
 }
 
+/** The blog index: the design kit's publication list markup with each post's
+ * card image beside its title, summary, and publication date. */
 export function renderBlogIndex(posts: readonly BlogPost[]): string {
-  return renderArticleIndexHtml({
-    heading: "Posts",
-    showDates: false,
-    headingId: "blog-posts",
-    items: posts.filter(post => post.indexable).map(post => ({
-      href: post.path, title: post.title, dek: post.dek, published: post.published,
-      ...(post.updated ? { updated: post.updated } : {}),
-      ...(post.eyebrow ? { eyebrow: post.eyebrow } : {}),
-    })),
+  const seen = new Set<string>();
+  const entries = posts.filter(post => post.indexable).map(post => {
+    if (seen.has(post.path)) throw new RangeError(`Blog index lists ${post.path} more than once.`);
+    seen.add(post.path);
+    const image = postSocialImage(post);
+    return `<article class="plain-publication__entry blog-card">` +
+      `<a class="blog-card__image" href="${escapeHtml(post.path)}" tabindex="-1" aria-hidden="true"><img src="${escapeHtml(image.path)}" width="${SOCIAL_IMAGE_WIDTH}" height="${SOCIAL_IMAGE_HEIGHT}" alt="" loading="lazy" decoding="async"></a>` +
+      `<div class="blog-card__body">` +
+      (post.eyebrow ? `<p class="plain-publication__entry-label">${escapeHtml(post.eyebrow)}</p>` : "") +
+      `<h3 class="plain-publication__entry-title"><a href="${escapeHtml(post.path)}">${escapeHtml(post.title)}</a></h3>` +
+      `<p class="plain-publication__entry-dek">${escapeHtml(post.dek)}</p>` +
+      `<p class="plain-publication__entry-meta"><time datetime="${escapeHtml(post.published)}">${escapeHtml(formatArticleDate(post.published))}</time></p>` +
+      `</div></article>`;
   });
+  return `<section aria-labelledby="blog-posts" class="plain-site plain-publication plain-publication--embedded plain-publication__list blog-cards" data-hraness-article-index="">` +
+    `<div class="plain-publication__section-heading"><h2 id="blog-posts">Posts</h2></div>` +
+    `<div class="plain-publication__article-list">${entries.join("")}</div></section>`;
 }
 
 export function blogIndexJsonLd(posts: readonly BlogPost[]) {

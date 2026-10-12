@@ -804,6 +804,17 @@ nav a[aria-current="page"] { color: var(--ink); }
 .docs-list-wide { max-width: 44rem; }
 .blog-index { max-width: 46rem; padding-block: 1rem 4rem; }
 .algal-site .blog-index > .plain-site.plain-publication.plain-publication--embedded { margin-inline: 0; padding-inline: 0; }
+.blog-index { max-width: 52rem; }
+.algal-site .plain-site.plain-publication .blog-card { display: grid; grid-template-columns: minmax(0, 13rem) minmax(0, 1fr); gap: .25rem 1.25rem; align-items: start; }
+.blog-card__image { display: block; border: 1px solid var(--ui-surface-edge, var(--hraness-material-seam)); border-radius: var(--radius-md); overflow: hidden; background: var(--white); box-shadow: var(--elevation-low); }
+.blog-card__image img { display: block; width: 100%; height: auto; aspect-ratio: 1200 / 630; object-fit: cover; }
+.blog-card__body { min-width: 0; }
+.algal-site .plain-site.plain-publication .blog-card .plain-publication__entry-meta { margin-top: .4rem; }
+@media (max-width: 640px) {
+  .algal-site .plain-site.plain-publication .blog-card { grid-template-columns: minmax(0, 1fr); gap: .6rem; }
+  .blog-card__image { max-width: 22rem; }
+}
+@media (forced-colors: active) { .blog-card__image { border-color: CanvasText; } }
 
 /* Mirrored markdown typography — restrained, dense enough for reference. */
 .prose { font-size: 1rem; line-height: 1.75; color: var(--ink); }
