@@ -23,7 +23,6 @@ import { verifyReceipt } from "../src/verify";
 import { renderIconSprite, siteIcon } from "./icons";
 import { buildSiteStyles } from "./assets";
 import { renderStatusPageHtml } from "@hraness/design-kit";
-import { highlightCode } from "@hraness/design-kit/syntax-highlighting";
 import { pageDocument, type SitePageMeta } from "./chrome";
 import { ADOPTION_BOUNDARY, CIVILIZATION_EXAMPLE, INSTALL_TERMINAL, SITE_DESCRIPTION, SITE_NAME, productMessaging } from "./copy";
 import { renderInstallScript } from "./install-script";
