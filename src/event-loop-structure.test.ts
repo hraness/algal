@@ -92,6 +92,28 @@ test("behavior digest, byte limit, unknown keys and accessors reject safely", ()
   expect(code(trace(), cycle)).toBe("EVENT_LOOP_PARSE");
 });
 
+test("structural join reads only an inert trace snapshot, even if the behavior mutates the caller", () => {
+  const original = trace();
+  let reads = 0;
+  const foreign = new Proxy(original, {
+    get() { reads++; throw new Error("read from the caller's trace"); },
+  });
+  expect(verifyEventLoopTraceStructure(foreign, behavior).digest).toBe(original.digest);
+  expect(reads).toBe(0);
+
+  const changed = trace();
+  const digestBeforeMutation = changed.digest;
+  const mutatingBehavior = new Proxy(model(), {
+    getOwnPropertyDescriptor(target, key) {
+      if (key === "contract") changed.entries[0].type = "foreign";
+      return Reflect.getOwnPropertyDescriptor(target, key);
+    },
+  });
+  expect(verifyEventLoopTraceStructure(changed, mutatingBehavior).digest).toBe(digestBeforeMutation);
+  expect(changed.entries[0].type).toBe("foreign");
+  expect(() => parseEventLoopTrace(changed)).toThrow(new EventLoopContractError("EVENT_LOOP_DIGEST"));
+});
+
 test("re-digested behavior cannot write one state field twice in a transition", () => {
   const repeated = model();
   repeated.actors[0].transitions[0].writes.push(structuredClone(repeated.actors[0].transitions[0].writes[0]));

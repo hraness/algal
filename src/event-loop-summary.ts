@@ -1,4 +1,5 @@
 import { parseEventLoopTrace } from "./event-loop-contract";
+import { snapshotEventLoopValue } from "./event-loop-structure";
 
 /** Counts and resource claims derived only from a validated P1 trace. */
 export type EventLoopTraceSummary = {
@@ -31,7 +32,10 @@ type Entry = {
  * These figures summarize claims, not execution, measured fuel, or host effects.
  */
 export function summarizeEventLoopTrace(value: unknown): { digest: string; summary: EventLoopTraceSummary } {
-  const { digest } = parseEventLoopTrace(value);
+  // Never aggregate the caller's object after checking its digest. A foreign
+  // proxy could change a field between parsing and summarizing.
+  const copy = snapshotEventLoopValue(value);
+  const { digest } = parseEventLoopTrace(copy);
   const summary: EventLoopTraceSummary = {
     accepted: 0, duplicate: 0, backpressure: 0, failed: 0,
     continued: 0, quiet: 0, deferred: 0, escalated: 0, unmatched: 0,
@@ -40,7 +44,7 @@ export function summarizeEventLoopTrace(value: unknown): { digest: string; summa
   };
   // The parser has already checked every descriptor, kind, resource bound,
   // outcome and effect count. No foreign value is cast until that succeeds.
-  for (const { decision } of (value as { entries: Entry[] }).entries) {
+  for (const { decision } of (copy as unknown as { entries: Entry[] }).entries) {
     summary[decision.kind]++;
     if (decision.kind !== "accepted" && decision.kind !== "failed") continue;
     const resources = decision.resources!;

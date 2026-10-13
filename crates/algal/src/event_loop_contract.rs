@@ -211,6 +211,21 @@ pub fn parse_event_loop_trace(value: &Value) -> Result<String> {
         }
         let decision = &entry["decision"];
         let keys: &[&str] = match decision.get("kind").and_then(Value::as_str) {
+            Some("accepted")
+                if matches!(decision["outcome"].as_str(), Some("defer" | "escalate"))
+                    && decision.get("pending").is_some() =>
+            {
+                &[
+                    "kind",
+                    "transition",
+                    "outcome",
+                    "stateDigest",
+                    "outputs",
+                    "effects",
+                    "resources",
+                    "pending",
+                ]
+            }
             Some("accepted") => &[
                 "kind",
                 "transition",
@@ -283,6 +298,18 @@ pub fn parse_event_loop_trace(value: &Value) -> Result<String> {
                     }
                 } else {
                     id(&decision["transition"])?;
+                }
+                if let Some(pending) = decision.get("pending") {
+                    // Legacy shape-only pending records may omit the witness;
+                    // replay refuses them. Limit a supplied value separately.
+                    payload(pending)?;
+                    if canonical(pending)
+                        .map_err(|_| error("EVENT_LOOP_BOUNDS"))?
+                        .len()
+                        > 16_384
+                    {
+                        return Err(error("EVENT_LOOP_BOUNDS"));
+                    }
                 }
                 let state = sha(&decision["stateDigest"])?;
                 let outputs = list(&decision["outputs"], 0, max_output)?;

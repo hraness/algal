@@ -19,7 +19,7 @@ const size = (s: string): number => Buffer.byteLength(s, "utf8");
 
 // Take an inert, bounded copy before hashing or selecting any behavior field.
 // A foreign accessor cannot become part of a validated record.
-function snapshot(value: unknown): JsonValue {
+export function snapshotEventLoopValue(value: unknown): JsonValue {
   const active = new Set<object>();
   function walk(v: unknown, depth: number): JsonValue {
     if (depth > 32) fail("EVENT_LOOP_BOUNDS");
@@ -30,9 +30,13 @@ function snapshot(value: unknown): JsonValue {
     if (depth === 32) fail("EVENT_LOOP_BOUNDS");
     active.add(v);
     if (Array.isArray(v)) {
-      if (v.length > 1_024 || Reflect.ownKeys(v).length !== v.length + 1) fail("EVENT_LOOP_BOUNDS");
+      // A proxy around an array can trap `v.length`; take its data descriptor
+      // instead, just as we do for indexed elements and object properties.
+      const length = Object.getOwnPropertyDescriptor(v, "length")?.value as unknown;
+      if (typeof length !== "number" || !Number.isSafeInteger(length) || length < 0 ||
+          length > 1_024 || Reflect.ownKeys(v).length !== length + 1) fail("EVENT_LOOP_BOUNDS");
       const copy: JsonValue[] = [];
-      for (let i = 0; i < v.length; i++) {
+      for (let i = 0; i < length; i++) {
         const descriptor = Object.getOwnPropertyDescriptor(v, i);
         if (!descriptor?.enumerable || !("value" in descriptor)) fail("EVENT_LOOP_PARSE");
         copy.push(walk(descriptor.value, depth + 1));
@@ -111,7 +115,7 @@ export type EventLoopStaticSummary = {
   events: number; transitions: number; writes: number;
   notifications: number; deferrals: number; escalations: number;
 };
-type Transition = { on: string; result: string; outputs: number; unconditional: boolean };
+type Transition = { on: string; result: string; outputs: number; writes: number; unconditional: boolean };
 
 /** Check a trace against the pinned behavior's declarations, not its execution.
  * Unlike parseEventLoopTrace, this rejects a re-digested reset delivery that
@@ -119,8 +123,11 @@ type Transition = { on: string; result: string; outputs: number; unconditional: 
  */
 export function verifyEventLoopTraceStructure(trace: unknown, behaviorValue: unknown):
   { digest: string; staticSummary: EventLoopStaticSummary } {
-  const { digest: traceDigest } = parseEventLoopTrace(trace);
-  const behavior = row(snapshot(behaviorValue), ["contract", "behavior", "limits", "events", "actors", "digest"]);
+  // Parse and join the same inert copy. Reading the caller's trace after the
+  // digest check would allow a foreign object to change between those steps.
+  const traceCopy = snapshotEventLoopValue(trace);
+  const { digest: traceDigest } = parseEventLoopTrace(traceCopy);
+  const behavior = row(snapshotEventLoopValue(behaviorValue), ["contract", "behavior", "limits", "events", "actors", "digest"]);
   if (behavior.contract !== "algal.event-loop.v1") fail("EVENT_LOOP_CONTRACT");
   const meta = row(behavior.behavior, ["id", "revision", "sourceDigest", "digest"]);
   id(meta.id);
@@ -130,8 +137,9 @@ export function verifyEventLoopTraceStructure(trace: unknown, behaviorValue: unk
   if (digest(metaHash) !== hash(metaBody)) fail("EVENT_LOOP_DIGEST");
   const {digest: artifactHash, ...artifactBody} = behavior;
   if (digest(artifactHash) !== hash(artifactBody)) fail("EVENT_LOOP_DIGEST");
-  const checked = trace as { behavior: string; actor: string; limits: JsonValue; entries: Array<{type: string; payload: JsonValue; decision: {
+  const checked = traceCopy as unknown as { behavior: string; actor: string; limits: JsonValue; entries: Array<{type: string; payload: JsonValue; decision: {
     kind: string; transition?: string | null; outcome?: string; outputs?: string[];
+    stateDigest?: string; resources?: {stateBytes: number};
   }}> };
   if (checked.behavior !== artifactHash) fail("EVENT_LOOP_DIGEST");
   const limits = row(behavior.limits, ["maxEventBytes", "maxStateBytes", "maxOutputEvents", "maxTransitionFuel", "maxMailboxDepth"]);
@@ -162,7 +170,9 @@ export function verifyEventLoopTraceStructure(trace: unknown, behaviorValue: unk
     const item = row(field, ["name", "type", "initial"]);
     initial[id(item.name)] = item.initial;
   }
-  if (size(canonicalize(initial)) > integer(limits.maxStateBytes, 1, 262_144)) fail("EVENT_LOOP_BOUNDS");
+  const initialBytes = size(canonicalize(initial));
+  if (initialBytes > integer(limits.maxStateBytes, 1, 262_144)) fail("EVENT_LOOP_BOUNDS");
+  const initialDigest = hash(initial);
   const transitions = new Map<string, Transition>();
   const staticSummary: EventLoopStaticSummary = {events: events.size, transitions: 0, writes: 0, notifications: 0, deferrals: 0, escalations: 0};
   for (const transition of list(current.transitions, 1, 256)) {
@@ -202,9 +212,12 @@ export function verifyEventLoopTraceStructure(trace: unknown, behaviorValue: unk
     if ((outcome === "defer" || outcome === "escalate") && rule.writes instanceof Array && rule.writes.length) fail("EVENT_LOOP_SEMANTIC");
     if (outcome === "defer") { expression(result.key); staticSummary.deferrals++; }
     if (outcome === "escalate") { expression(result.request); staticSummary.escalations++; }
-    transitions.set(name, {on, result: outcome as string, outputs: outputs.length, unconditional: rule.when === null});
+    transitions.set(name, {on, result: outcome as string, outputs: outputs.length, writes: written.size, unconditional: rule.when === null});
     staticSummary.transitions++;
   }
+  let committed = false;
+  let lastDigest = initialDigest;
+  let lastBytes = initialBytes;
   for (const entry of checked.entries) {
     const fields = events.get(entry.type);
     if (!fields) fail("EVENT_LOOP_REFERENCE");
@@ -219,11 +232,26 @@ export function verifyEventLoopTraceStructure(trace: unknown, behaviorValue: unk
     // Guarded predecessors and whether failure occurred require replay.
     if (decision.transition !== null && [...transitions].some(([name, rule]) =>
       name < decision.transition! && rule.on === entry.type && rule.unconditional)) fail("EVENT_LOOP_SEMANTIC");
+    // Before the first committed transition, a failed or pending/unmatched
+    // decision cannot change the behavior's declared initial state. The shape
+    // parser checks continuity only after an accepted state was recorded.
+    if (!committed && (decision.kind === "failed" || ["defer", "escalate", "no-transition"].includes(decision.outcome!)) &&
+        (decision.stateDigest !== initialDigest || decision.resources?.stateBytes !== initialBytes)) fail("EVENT_LOOP_SEMANTIC");
     if (decision.kind === "failed") continue; // failure claims are not replayed.
     if (decision.outcome === "no-transition") {
       if ([...transitions.values()].some((t) => t.on === entry.type && t.unconditional)) fail("EVENT_LOOP_SEMANTIC");
     } else if (!selected || selected.result !== decision.outcome || selected.outputs !== decision.outputs?.length) {
       fail("EVENT_LOOP_SEMANTIC");
+    }
+    if (decision.outcome === "continue" || decision.outcome === "quiet") {
+      // An accepted rule with no state writes cannot change the prior state,
+      // even when expression replay is not available for rules with writes.
+      if (selected?.writes === 0 && (decision.stateDigest !== lastDigest || decision.resources?.stateBytes !== lastBytes)) {
+        fail("EVENT_LOOP_SEMANTIC");
+      }
+      lastDigest = decision.stateDigest!;
+      lastBytes = decision.resources!.stateBytes;
+      committed = true;
     }
   }
   return {digest: traceDigest, staticSummary};

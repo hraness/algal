@@ -144,7 +144,8 @@ export function parseEventLoopTrace(value: unknown): { digest: string; entries: 
     const previous = bound.get(key);
     if (previous !== undefined && previous !== content) fail("EVENT_LOOP_ID");
     const decision = row(item.decision, (choice) => choice.kind === "accepted"
-      ? ["kind", "transition", "outcome", "stateDigest", "outputs", "effects", "resources"]
+      ? ["kind", "transition", "outcome", "stateDigest", "outputs", "effects", "resources",
+        ...(choice.outcome === "defer" || choice.outcome === "escalate") && Object.hasOwn(choice, "pending") ? ["pending"] : []]
       : choice.kind === "failed"
         ? ["kind", "reason", "transition", "stateDigest", "resources"]
         : choice.kind === "backpressure" ? ["kind", "policy", "reason"] : ["kind"]);
@@ -174,6 +175,12 @@ export function parseEventLoopTrace(value: unknown): { digest: string; entries: 
       if (outcome === "no-transition") {
         if (decision.transition !== null) fail("EVENT_LOOP_SEMANTIC");
       } else id(decision.transition);
+      if (Object.hasOwn(decision, "pending")) {
+        if (outcome !== "defer" && outcome !== "escalate") fail("EVENT_LOOP_SEMANTIC");
+        // Legacy shape-only pending records may omit the value; replay refuses
+        // them. A supplied witness is limited independently of the trace size.
+        if (bytes(canonicalize(json(decision.pending))) > 16_384) fail("EVENT_LOOP_BOUNDS");
+      }
       const state = digest(decision.stateDigest);
       const outputs = list(decision.outputs, 0, maxOutput);
       outputs.forEach(digest);

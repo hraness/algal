@@ -86,8 +86,13 @@ const notPreempted = bind(later);
 add("later-unconditional-id", notPreempted, later, notPreempted.digest);
 // A single failed entry names increment despite an earlier unconditional id.
 // Shape parsing succeeds; both structural joins must reject this priority lie.
+const initial = Object.fromEntries(pinned.actors[0].state.fields.map((field: {name: string; initial: JsonValue}) => [field.name, field.initial]));
+const initialDigest = hash(initial);
+const initialBytes = Buffer.byteLength(canonicalize(initial));
 const singleFailed = structuredClone(fixture.failed);
 singleFailed.entries = [singleFailed.entries[1]];
+singleFailed.entries[0].decision.stateDigest = initialDigest;
+singleFailed.entries[0].decision.resources.stateBytes = initialBytes;
 singleFailed.entries[0].decision.transition = "increment";
 const failedPreempted = bind(earlier, singleFailed);
 if (parseEventLoopTrace(failedPreempted).digest !== failedPreempted.digest) throw new Error("failed priority witness does not parse");
@@ -98,6 +103,59 @@ reseal(failedUnselected);
 add("failed-before-selection", failedUnselected, earlier, failedUnselected.digest);
 const failedNotPreempted = bind(later, singleFailed);
 add("failed-later-unconditional-id", failedNotPreempted, later, failedNotPreempted.digest);
+// Before a commit, a failed decision cannot invent an unrelated initial state.
+const firstFailed = bind(pinned, singleFailed);
+add("first-failed-initial", firstFailed, pinned, firstFailed.digest);
+const forgedInitial = structuredClone(firstFailed);
+forgedInitial.entries[0].decision.stateDigest = `sha256:${"0".repeat(64)}`;
+reseal(forgedInitial);
+if (parseEventLoopTrace(forgedInitial).digest !== forgedInitial.digest) throw new Error("initial-state witness does not parse");
+add("first-failed-forged-state", forgedInitial, pinned, "EVENT_LOOP_SEMANTIC");
+const wrongInitialBytes = structuredClone(firstFailed);
+wrongInitialBytes.entries[0].decision.resources.stateBytes = initialBytes - 1;
+add("first-failed-forged-bytes", reseal(wrongInitialBytes), pinned, "EVENT_LOOP_SEMANTIC");
+const unmatched = structuredClone(fixture.base);
+unmatched.entries = [unmatched.entries[0]];
+unmatched.entries[0].decision = {kind: "accepted", transition: null, outcome: "no-transition",
+  stateDigest: initialDigest, outputs: [], effects: {requested: 0, settled: 0, receipts: []},
+  resources: {fuel: 0, stateBytes: initialBytes, outputEvents: 0}};
+reseal(unmatched);
+add("first-unmatched-initial", unmatched, pinned, unmatched.digest);
+const wrongUnmatched = structuredClone(unmatched);
+wrongUnmatched.entries[0].decision.resources.stateBytes = initialBytes + 1;
+add("first-unmatched-forged-bytes", reseal(wrongUnmatched), pinned, "EVENT_LOOP_SEMANTIC");
+// A selected rule with no writes cannot change state, before or after a commit.
+const noWrites = structuredClone(pinned);
+noWrites.actors[0].transitions[1].writes = [];
+reseal(noWrites);
+const unchanged = structuredClone(fixture.base);
+unchanged.entries[3].decision.stateDigest = unchanged.entries[0].decision.stateDigest;
+const afterCommit = bind(noWrites, unchanged);
+add("no-write-after-commit", afterCommit, noWrites, afterCommit.digest);
+const afterForged = structuredClone(afterCommit);
+afterForged.entries[3].decision.stateDigest = initialDigest;
+add("no-write-after-forged-state", reseal(afterForged), noWrites, "EVENT_LOOP_SEMANTIC");
+const firstNoWrite = structuredClone(unchanged);
+firstNoWrite.entries = [firstNoWrite.entries[3]];
+firstNoWrite.entries[0].decision.stateDigest = initialDigest;
+firstNoWrite.entries[0].decision.resources.stateBytes = initialBytes;
+const firstQuiet = bind(noWrites, firstNoWrite);
+add("no-write-first-quiet", firstQuiet, noWrites, firstQuiet.digest);
+const firstForged = structuredClone(firstQuiet);
+firstForged.entries[0].decision.stateDigest = fixture.base.entries[0].decision.stateDigest;
+reseal(firstForged);
+if (parseEventLoopTrace(firstForged).digest !== firstForged.digest) throw new Error("no-write witness does not parse");
+add("no-write-first-forged-state", firstForged, noWrites, "EVENT_LOOP_SEMANTIC");
+const firstWrongBytes = structuredClone(firstQuiet);
+firstWrongBytes.entries[0].decision.resources.stateBytes = initialBytes + 1;
+add("no-write-first-forged-bytes", reseal(firstWrongBytes), noWrites, "EVENT_LOOP_SEMANTIC");
+const noWritesContinue = structuredClone(noWrites);
+noWritesContinue.actors[0].transitions[1].result.kind = "continue";
+reseal(noWritesContinue);
+const firstContinue = structuredClone(firstNoWrite);
+firstContinue.entries[0].decision.outcome = "continue";
+const continued = bind(noWritesContinue, firstContinue);
+add("no-write-first-continue", continued, noWritesContinue, continued.digest);
 
 // A changed output digest still passes the shape and structural join. Preserve
 // this counterexample until actual notification identity replay is implemented.

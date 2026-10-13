@@ -52,7 +52,9 @@ The closed `decision` object has one of these shapes:
   preceding guards or establish that the failure occurred. This decision
   claims no committed state, output, or effect. `stateDigest` is the unchanged
   state digest; if an earlier accepted decision recorded a state digest in this
-  trace, the shape parser checks equality. A redelivery of the failed event is
+  trace, the shape parser checks equality. Before the first committed decision,
+  the structural join compares the claimed state digest and byte size with the
+  selected actor's declared initial state. A redelivery of the failed event is
   a duplicate, not a second evaluation.
 - `{kind: "accepted", transition, outcome, stateDigest, outputs, effects,
   resources}` requires an unbound key and a depth below `maxMailboxDepth`.
@@ -61,7 +63,20 @@ The closed `decision` object has one of these shapes:
   `null`. `stateDigest` is a digest. `outputs` is a list of 0 to
   `limits.maxOutputEvents` (at most 64) digests. Quiet and pending outcomes and
   `no-transition` cannot list outputs. When an earlier accepted decision
-  recorded a state digest, pending and unmatched outcomes must keep it.
+  recorded a state digest, pending and unmatched outcomes must keep it. Before
+  the first committed decision, the structural join requires pending and
+  unmatched outcomes to keep the declared initial state's digest and byte size.
+  An accepted `continue` or `quiet` rule with no state writes must keep the
+  previous state digest and byte size, starting from that initial state.
+
+Agent-decided, owner may revisit: an accepted `defer` or `escalate` decision
+may also include `pending`, the evaluated key or request JSON value. It is
+allowed only for these two outcomes, with at most 16,384 canonical UTF-8 bytes,
+32 value levels, 1,024 list items, 256 object keys, and 65,536 UTF-8 bytes per
+string or key. The shape parser keeps missing witnesses admissible for older
+shape-only records; **replay refuses a pending outcome without a witness**.
+Replay compares the value and evaluator fuel, including a present `null` value.
+A matched witness is a proposed request, not evidence of host execution.
 
 `effects` is a closed summary `{requested, settled, receipts}`. In this v1
 proposal, both counts must be zero and `receipts` must be empty. P0 transitions
@@ -94,28 +109,57 @@ check the event payload against its closed, typed record schema. They check
 transition ids against the event handled by each rule, rule out a named
 accepted or failed selection after an earlier unconditional transition id,
 match accepted outcomes and declared notification *counts*, and reject
-`no-transition` when an unconditional transition exists. They validate the
-declarations needed for this join: event and actor ids, the selected actor's
-state and transitions, references, result kinds, expression envelopes and field
-limits. A behavior value has at most 1,048,576 canonical UTF-8 bytes, 32 nested
-value levels, 1,024 elements per list, 256 keys per object, and 65,536 UTF-8
-bytes per string or key. The behavior's event list has 1 to 128 entries, actors
-1 to 64, transitions for the selected actor 1 to 256, and fields and writes at
-most 64. Each declared expression envelope has at most 16,384 canonical UTF-8
-bytes. The join checks only envelope shape, not expression grammar or
-evaluation.
+`no-transition` when an unconditional transition exists. Until the first
+`continue` or `quiet` commits a state, failed, deferred, escalated, and
+unmatched decisions must identify the declared initial state and its canonical
+byte length. An accepted `continue` or `quiet` rule with no state writes must
+also keep the previous state digest and byte size, even after another rule
+commits. They validate the declarations needed for this join: event and actor
+ids, the selected actor's state and transitions, references, result kinds,
+expression envelopes and field limits. A behavior value has at most 1,048,576
+canonical UTF-8 bytes, 32 nested value levels, 1,024 elements per list, 256 keys
+per object, and 65,536 UTF-8 bytes per string or key. The behavior's event list
+has 1 to 128 entries, actors 1 to 64, transitions for the selected actor 1 to
+256, and fields and writes at most 64. Each declared expression envelope has at
+most 16,384 canonical UTF-8 bytes. The join checks only envelope shape, not
+expression grammar or evaluation.
 
 The returned six-field static summary counts declared events, transitions,
 state writes, notifications, deferrals, and escalations for the selected actor
 (events are behavior-wide). Those counts come from the behavior, not the trace
 or a host. At most 128, 256, 16,384, 16,384, 256, and 256 respectively can
 be returned. The join does not check guard truth, evaluate writes, check state
-or output digests, prove fuel use, or perform host effects. It is not a full P0
-behavior admission checker or a replay verifier. In particular, matching
-notification counts do not establish that the listed output digests identify
-the declared notifications. The separate parity fixture derives a re-digested
-`reset` entry that falsely claims the `increment` transition and notification;
-both structural joins reject it although the shape parsers accept its digest.
+digests for transitions with writes or output digests, prove fuel use, or perform
+host effects. It is not a full P0 behavior admission checker or a replay
+verifier. In particular, matching notification counts do not establish that
+the listed output digests identify the declared notifications. The separate
+parity fixture derives a re-digested `reset` entry that falsely claims the
+`increment` transition and notification; both structural joins reject it
+although the shape parsers accept its digest.
+
+## Decision record: initial state before the first commit
+
+Agent-decided, owner may revisit: the P1 structural join starts each complete
+trace at the selected actor's declared initial state. Before the first
+`continue` or `quiet`, no failed, pending, or unmatched decision can change that
+state. A later committed transition can change it; the shape parser then checks
+the unchanged-state decisions against the last accepted state. This decision
+rejects re-digested first entries that invent a different state or byte count,
+without treating a claimed fuel count or a transition result as measured. A
+future partial-trace format would need a separately checked starting state.
+TypeScript and Rust tests and shared structural vectors specify the initial
+state and forged first-entry claims. This does not close the output-identity or
+expression-replay gaps in the structural join; the separate replay checker
+covers the currently supported successful, failed and pending decisions.
+
+## Decision record: transitions without state writes
+
+Agent-decided, owner may revisit: a selected `continue` or `quiet` rule with
+no writes cannot change the prior state. The structural join compares its
+claimed digest and byte size to the previous committed state, or to the
+actor's initial state if none has committed. The TypeScript and Rust tests and
+six shared structural vectors specify both cases. A rule with writes still
+needs expression replay to establish the resulting state.
 
 ## Decision record: named failed selections
 
@@ -125,11 +169,12 @@ id. This is a declaration-only invariant of the P0 ordering contract even if
 evaluation later fails; leaving it unchecked admits a known-impossible trace
 without requiring guard replay to notice it. A null failed selection may stop
 before choosing a rule. Earlier guarded rules, expression results and whether
-any reported failure actually happened remain for the P3/P4 replay verifiers.
-The single-entry failed-selection rejection and the null/later-id acceptances
-are checked by TypeScript and Rust tests and structural parity vectors. This
-decision does not qualify the whole P1 contract or loosen the requirement for
-replay before relying on a trace as execution evidence.
+any reported failure happened require separate expression replay; the
+structural join does not check them. The single-entry failed-selection rejection
+and the null/later-id acceptances are checked by TypeScript and Rust tests and
+structural parity vectors. This decision does not qualify the whole P1 contract
+or loosen the requirement for replay before relying on a trace as execution
+evidence.
 
 ## Derived summary
 
@@ -156,8 +201,10 @@ The parser rejects invalid shapes with the `EVENT_LOOP_*` codes from the
 `scripts/fixtures/event-loop-contract.json` and a derived nonadjacent-state
 vector check both implementations with the same valid and invalid trace values.
 The structural parity script also compares pinned behavior joins and a false
-`reset` decision. Neither implementation schedules actors, performs host calls,
-replays expressions, verifies notification identities, or proves a resource
-count. A future replay verifier must join this trace to a checked behavior,
-retained earlier bindings, and an effect adapter's idempotency records. This
-proposal does not complete the P1 gate.
+`reset` decision. Neither the shape parser nor the structural join schedules
+actors, performs host calls, replays expressions, verifies notification
+identities, or proves a resource count. The separate [event-loop replay
+checker](event-loop-replay.md) checks expressions, notification identities,
+resource claims and supplied pending values for the offline vectors. Host
+delivery and effect-adapter idempotency records remain outside these checks.
+This proposal does not complete the P1 gate.

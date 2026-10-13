@@ -38,6 +38,22 @@ test("validated summaries count decisions and claimed resources, not effects", a
   }
 });
 
+test("summary reads the validated snapshot, never a foreign property after parsing", () => {
+  const copy = structuredClone(fixture.base);
+  let reads = 0;
+  const foreign = new Proxy(copy, {
+    get() { reads++; throw new Error("read from foreign trace"); },
+  });
+  expect(summarizeEventLoopTrace(foreign)).toEqual(summarizeEventLoopTrace(copy));
+  expect(reads).toBe(0);
+  let invoked = 0;
+  Object.defineProperty(copy.entries[0].decision, "kind", {
+    enumerable: true, get() { invoked++; return "accepted"; },
+  });
+  expect(() => summarizeEventLoopTrace(copy)).toThrow(new EventLoopContractError("EVENT_LOOP_PARSE"));
+  expect(invoked).toBe(0);
+});
+
 test("summary fields have zero, per-entry maximum and 256-entry maximum cases", () => {
   const zero = structuredClone(fixture.base) as RecordValue;
   const first = (zero.entries as RecordValue[])[0]!;

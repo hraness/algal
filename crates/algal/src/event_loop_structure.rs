@@ -182,6 +182,7 @@ struct Transition {
     on: String,
     result: String,
     outputs: usize,
+    writes: usize,
     unconditional: bool,
 }
 
@@ -270,13 +271,14 @@ pub fn verify_event_loop_trace_structure(
     for field in list(&current["state"]["fields"], 0, 64)? {
         initial.insert(id(&field["name"])?.to_owned(), field["initial"].clone());
     }
-    if canonical(&Value::Object(initial))
+    let initial = Value::Object(initial);
+    let initial_bytes = canonical(&initial)
         .map_err(|_| error("EVENT_LOOP_BOUNDS"))?
-        .len() as u64
-        > number(&behavior["limits"]["maxStateBytes"], 1, 262_144)?
-    {
+        .len() as u64;
+    if initial_bytes > number(&behavior["limits"]["maxStateBytes"], 1, 262_144)? {
         return Err(error("EVENT_LOOP_BOUNDS"));
     }
+    let initial_digest = digest(&initial).map_err(|_| error("EVENT_LOOP_BOUNDS"))?;
     let mut transitions = BTreeMap::new();
     let mut summary = EventLoopStaticSummary {
         events: events.len(),
@@ -358,11 +360,15 @@ pub fn verify_event_loop_trace_structure(
                 on: on.to_owned(),
                 result: outcome.to_owned(),
                 outputs: outputs.len(),
+                writes: written.len(),
                 unconditional: rule["when"].is_null(),
             },
         );
         summary.transitions += 1;
     }
+    let mut committed = false;
+    let mut last_digest = initial_digest.clone();
+    let mut last_bytes = initial_bytes;
     for entry in list(&trace["entries"], 1, 256)? {
         let event = id(&entry["type"])?;
         let fields = events
@@ -398,6 +404,17 @@ pub fn verify_event_loop_trace_structure(
         }) {
             return Err(error("EVENT_LOOP_SEMANTIC"));
         }
+        // Until the first committed transition, failure and pending/unmatched
+        // decisions must preserve the behavior's declared initial state.
+        if !committed
+            && (decision["kind"] == "failed"
+                || ["defer", "escalate", "no-transition"]
+                    .contains(&decision["outcome"].as_str().unwrap_or("")))
+            && (decision["stateDigest"] != initial_digest
+                || decision["resources"]["stateBytes"] != initial_bytes)
+        {
+            return Err(error("EVENT_LOOP_SEMANTIC"));
+        }
         if decision["kind"] == "failed" {
             continue;
         }
@@ -415,6 +432,18 @@ pub fn verify_event_loop_trace_structure(
                     .is_none_or(|outputs| outputs.len() != rule.outputs)
         }) {
             return Err(error("EVENT_LOOP_SEMANTIC"));
+        }
+        if decision["outcome"] == "continue" || decision["outcome"] == "quiet" {
+            // A rule without state writes must preserve the prior state.
+            if selected.is_some_and(|rule| rule.writes == 0)
+                && (decision["stateDigest"] != last_digest
+                    || decision["resources"]["stateBytes"] != last_bytes)
+            {
+                return Err(error("EVENT_LOOP_SEMANTIC"));
+            }
+            last_digest = sha(&decision["stateDigest"])?.to_owned();
+            last_bytes = number(&decision["resources"]["stateBytes"], 0, 262_144)?;
+            committed = true;
         }
     }
     Ok((trace_digest, summary))
