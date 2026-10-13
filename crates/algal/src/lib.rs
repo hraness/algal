@@ -41,6 +41,7 @@ pub mod error;
 pub mod event_loop_contract;
 #[cfg(test)]
 mod event_loop_contract_tests;
+pub mod event_loop_structure;
 pub mod foundry;
 pub mod graph;
 pub mod habitat_budget;
