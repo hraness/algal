@@ -74,18 +74,18 @@
   </section>
 
   <section class="habitat-section" id="how" aria-labelledby="how-title">
-    <div class="section-heading"><div><p class="eyebrow">How it works</p><h2 id="how-title" class="hraness-marketing-section__heading">{{HEADING_HOME_HOST}}</h2></div><p>The program is data. Your host runs it with the tools and budgets it grants, records every effect, and can replay the record.</p></div>
+    <div class="section-heading"><div><p class="eyebrow">How it works</p><h2 id="how-title" class="hraness-marketing-section__heading">{{HEADING_HOME_HOST}}</h2></div><p>The program is data. Your host runs it with the tools and budgets it grants and records every effect.</p></div>
     <ol class="icon-row">
-      <li><svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#file-check"></use></svg><b>Check</b><span>The host reads the program and its budgets before anything runs.</span></li>
-      <li><svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#cpu"></use></svg><b>Run</b><span>Model calls and tools run through the permissions the host attached.</span></li>
-      <li><svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#database"></use></svg><b>Record</b><span>Every step lands in a store either runtime can continue from.</span></li>
-      <li><svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#replay"></use></svg><b>Replay</b><span>The record verifies offline, with no model in the loop.</span></li>
+      <li><svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#file-check"></use></svg><b>Check</b><span>Program and budgets are read before anything runs.</span></li>
+      <li><svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#cpu"></use></svg><b>Run</b><span>Model and tool calls use the permissions the host grants.</span></li>
+      <li><svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#database"></use></svg><b>Record</b><span>Each step lands in a store either runtime can continue.</span></li>
+      <li><svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#replay"></use></svg><b>Replay</b><span>The record verifies offline, no model needed.</span></li>
     </ol>
     <p class="section-link"><a href="/docs/habitats/">How a host runs a program <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-right"></use></svg></a></p>
   </section>
 
   <section class="artifact-section" id="replay" aria-labelledby="replay-title">
-    <div class="section-heading"><div><p class="eyebrow">Measured</p><h2 id="replay-title" class="hraness-marketing-section__heading">{{HEADING_HOME_REPLAY}}</h2></div><p>The release-review program waited for an approval, exited, and resumed in a new process. These are the numbers from that run.</p></div>
+    <div class="section-heading"><div><p class="eyebrow">Measured</p><h2 id="replay-title" class="hraness-marketing-section__heading">{{HEADING_HOME_REPLAY}}</h2></div><p>The release-review program waited for an approval, exited, and resumed in a new process.</p></div>
     {{VM_MEASURE}}
   </section>
 
@@ -98,7 +98,7 @@
         <li class="generations__gen"><span class="generations__label">Generation 3</span><span class="generations__cands"><i class="is-adopted"></i><i></i><i></i></span></li>
         <li class="generations__gen generations__gen--kept"><span class="generations__label">Kept</span><span class="generations__cands"><i class="is-adopted is-kept"></i></span></li>
       </ol>
-      <figcaption id="generations-caption">Propose, evaluate, adopt. The filled candidate seeds the next generation; the kept program carries its scores and lineage.</figcaption>
+      <figcaption id="generations-caption">Propose, evaluate, adopt. The filled candidate seeds the next generation.</figcaption>
     </figure>
     <p class="section-link"><a href="/tour/#grow">See the tour <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-right"></use></svg></a></p>
   </section>
@@ -110,14 +110,14 @@
   </section>
 
   <section class="compare-section" id="compare" aria-labelledby="compare-title">
-    <div class="section-heading"><div><p class="eyebrow">Compared</p><h2 id="compare-title" class="hraness-marketing-section__heading">If you run Temporal, Restate,<br><em>Inngest, or LangGraph.</em></h2></div><p>ALGAL shares their vocabulary. The difference is that the workflow is data a host can inspect, hash, and run, not code in your process.</p></div>
+    <div class="section-heading"><div><p class="eyebrow">Compared</p><h2 id="compare-title" class="hraness-marketing-section__heading">If you run Temporal, Restate,<br><em>Inngest, or LangGraph.</em></h2></div><p>Same vocabulary. The difference: the workflow is data a host can inspect, hash, and run, not code in your process.</p></div>
     <table class="compare-table">
       <thead><tr><th scope="col">If you use</th><th scope="col">ALGAL differs in</th></tr></thead>
       <tbody>
-        <tr><th scope="row">Temporal or Restate</th><td>The workflow is a hashed program, not host code; the run verifies offline.</td></tr>
-        <tr><th scope="row">Inngest</th><td>A step is a typed model decision or a pure expression with a recorded budget.</td></tr>
-        <tr><th scope="row">LangGraph</th><td>The graph cannot call your process; your host grants every tool and model.</td></tr>
-        <tr><th scope="row">A plain agent loop</th><td>The run pauses for people, exits, and resumes on another machine.</td></tr>
+        <tr><th scope="row">Temporal or Restate</th><td>The workflow is a hashed program, not host code.</td></tr>
+        <tr><th scope="row">Inngest</th><td>A step is a typed model decision or a pure expression.</td></tr>
+        <tr><th scope="row">LangGraph</th><td>The graph cannot call your process; the host grants every tool.</td></tr>
+        <tr><th scope="row">A plain agent loop</th><td>The run pauses for people, exits, and resumes elsewhere.</td></tr>
       </tbody>
     </table>
     <p class="section-link"><a href="/docs/why-unique/">All comparisons <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-right"></use></svg></a></p>

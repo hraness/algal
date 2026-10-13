@@ -366,6 +366,7 @@ const habitatReceipt = evolutionRuns.get("habitat")!;
 // verifies the receipts offline. Every CLI call in that script is its own OS
 // process. site/launch/vm-demo-report.json is the report the script wrote on
 // 2026-10-13; every number below is read from it.
+const releaseReviewPath = join(ROOT, "examples/vm/release-review.algal.json");
 const vmReport = asObject(JSON.parse(await readFile(join(SITE, "launch/vm-demo-report.json"), "utf8")) as unknown, "vm demo report");
 if (vmReport.ok !== true) throw new Error("The VM demo report must come from a run that passed");
 const vmProcess = asObject(vmReport.process, "vm report process");
@@ -396,12 +397,12 @@ const HERO_RUN = `<figure class="hr-run">
     { kind: "cmd", text: "algal process create alpha release-review.algal.json --args alpha.args.json --dir ./store" },
     { kind: "out", text: "status: ready        generation: 0" },
     { kind: "cmd", text: "algal process tick alpha --dir ./store" },
-    { kind: "out", text: "status: suspended    generation: 1     proposal sent, waiting for approval" },
+    { kind: "out", text: "status: suspended    generation: 1     waiting for approval" },
     { kind: "note", text: "The process ends. Nothing stays running." },
     { kind: "cmd", text: "algal mailbox send $APPROVALS approve.json --idempotency-key $KEY --dir ./store" },
-    { kind: "out", text: "delivered           sent twice, delivered once" },
+    { kind: "out", text: "delivered once" },
     { kind: "cmd", text: "algal process schedule --max-ticks 8 --dir ./store" },
-    { kind: "out", text: "ticks: 1            resumed from the recorded prefix" },
+    { kind: "out", text: "ticks: 1             resumed from the record" },
     { kind: "cmd", text: "algal process verify alpha --dir ./store" },
     { kind: "out", text: `ok: true             receipts: ${String(vmAlpha.verifiedReceipts)}     model calls: ${VM_VERIFY_DECISIONS}` },
   ])}</code></pre>
@@ -418,7 +419,7 @@ const VM_MEASURE = `<figure class="vm-measure">
     ${metric(VM_VERIFY_DECISIONS, "model calls needed to verify")}
     ${metric(VM_CLI_PROCESSES, "separate processes in one run")}
   </ul>
-  <figcaption>From <a href="/launch/vm-demo-report.json">vm-demo-report.json</a>, written by <code>bun scripts/vm-demo.ts</code> with a scripted model adapter.</figcaption>
+  <figcaption>Source: <a href="/launch/vm-demo-report.json">vm-demo-report.json</a>, written by <code>bun scripts/vm-demo.ts</code>.</figcaption>
 </figure>`;
 
 // Presentation keeps the site's line break and emphasis without copying words.

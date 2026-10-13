@@ -1090,3 +1090,9 @@ pre { max-inline-size: 100%; overflow-x: auto; overscroll-behavior-x: contain; }
   .metric-strip li { border-color: CanvasText; }
   .icon-row li, .compare-table, .hr-run { border-color: CanvasText; }
 }
+/* Home sections share the hero's left edge; the dark band keeps its own inset. */
+main.hraness-marketing-page > :is(#what, #language, #how, #replay, #install, #compare) { padding-inline: 0; }
+@media (max-width: 480px) {
+  .hr-pre, .source-code, .try-section .algal-terminal-code, .try-section pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .hr-pre .hr-out { padding-left: 1.1em; text-indent: 0; }
+}
