@@ -611,15 +611,15 @@ nav a[aria-current="page"] { color: var(--ink); }
   .pf-step[style*="--pf-i:7"] { animation-name: pf-at-7; }
   .pf-step[style*="--pf-i:8"] { animation-name: pf-at-8; }
   .pf-step[style*="--pf-i:9"] { animation-name: pf-at-9; }
-  @keyframes pf-at-1 { 0%, 6% { opacity: 0; transform: translateY(.3rem); } 10%, 95% { opacity: 1; transform: none; } 100% { opacity: 0; } }
-  @keyframes pf-at-2 { 0%, 14% { opacity: 0; transform: translateY(.3rem); } 18%, 95% { opacity: 1; transform: none; } 100% { opacity: 0; } }
-  @keyframes pf-at-3 { 0%, 22% { opacity: 0; transform: translateY(.3rem); } 26%, 95% { opacity: 1; transform: none; } 100% { opacity: 0; } }
-  @keyframes pf-at-4 { 0%, 32% { opacity: 0; transform: translateY(.3rem); } 36%, 95% { opacity: 1; transform: none; } 100% { opacity: 0; } }
-  @keyframes pf-at-5 { 0%, 44% { opacity: 0; transform: translateX(-.4rem); } 49%, 95% { opacity: 1; transform: none; } 100% { opacity: 0; } }
-  @keyframes pf-at-6 { 0%, 56% { opacity: 0; transform: translateY(.3rem); } 60%, 95% { opacity: 1; transform: none; } 100% { opacity: 0; } }
-  @keyframes pf-at-7 { 0%, 66% { opacity: 0; transform: translateY(.3rem); } 70%, 95% { opacity: 1; transform: none; } 100% { opacity: 0; } }
-  @keyframes pf-at-8 { 0%, 74% { opacity: 0; transform: translateY(.3rem); } 78%, 95% { opacity: 1; transform: none; } 100% { opacity: 0; } }
-  @keyframes pf-at-9 { 0%, 82% { opacity: 0; transform: translateY(.3rem); } 86%, 95% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+  @keyframes pf-at-1 { 0%, 6% { opacity: .18; transform: translateY(.3rem); } 10%, 95% { opacity: 1; transform: none; } 100% { opacity: .18; } }
+  @keyframes pf-at-2 { 0%, 14% { opacity: .18; transform: translateY(.3rem); } 18%, 95% { opacity: 1; transform: none; } 100% { opacity: .18; } }
+  @keyframes pf-at-3 { 0%, 22% { opacity: .18; transform: translateY(.3rem); } 26%, 95% { opacity: 1; transform: none; } 100% { opacity: .18; } }
+  @keyframes pf-at-4 { 0%, 32% { opacity: .18; transform: translateY(.3rem); } 36%, 95% { opacity: 1; transform: none; } 100% { opacity: .18; } }
+  @keyframes pf-at-5 { 0%, 44% { opacity: .18; transform: translateX(-.4rem); } 49%, 95% { opacity: 1; transform: none; } 100% { opacity: .18; } }
+  @keyframes pf-at-6 { 0%, 56% { opacity: .18; transform: translateY(.3rem); } 60%, 95% { opacity: 1; transform: none; } 100% { opacity: .18; } }
+  @keyframes pf-at-7 { 0%, 66% { opacity: .18; transform: translateY(.3rem); } 70%, 95% { opacity: 1; transform: none; } 100% { opacity: .18; } }
+  @keyframes pf-at-8 { 0%, 74% { opacity: .18; transform: translateY(.3rem); } 78%, 95% { opacity: 1; transform: none; } 100% { opacity: .18; } }
+  @keyframes pf-at-9 { 0%, 82% { opacity: .18; transform: translateY(.3rem); } 86%, 95% { opacity: 1; transform: none; } 100% { opacity: .18; } }
   @keyframes pf-lane-fade { 0%, 40% { opacity: 1; } 46%, 100% { opacity: .55; } }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -1051,7 +1051,7 @@ pre { max-inline-size: 100%; overflow-x: auto; overscroll-behavior-x: contain; }
 .program-window .window-bar a { display: inline-flex; align-items: center; gap: .25rem; text-decoration: none; min-block-size: 2.25rem; }
 .source-pane .source-code { margin: 0; }
 .icon-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; margin: 0; padding: 0; list-style: none; counter-reset: step; }
-.icon-row li { display: grid; gap: .45rem; padding: 1.1rem 1.15rem 1.2rem; border: 1px solid var(--ui-surface-edge, var(--line)); border-radius: var(--radius-md); background: var(--white); min-width: 0; }
+.icon-row li { display: grid; gap: .45rem; align-content: start; padding: 1.1rem 1.15rem 1.2rem; border: 1px solid var(--ui-surface-edge, var(--line)); border-radius: var(--radius-md); background: var(--white); min-width: 0; }
 .icon-row .site-icon { inline-size: 1.4rem; block-size: 1.4rem; color: var(--primary); }
 .icon-row b { font: 550 .98rem/1.4 var(--sans); color: var(--ink); }
 .icon-row b::before { counter-increment: step; content: counter(step, decimal-leading-zero) " "; font: 500 .72rem/1 var(--mono); color: var(--muted); letter-spacing: .04em; margin-inline-end: .35rem; }
