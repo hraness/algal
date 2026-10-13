@@ -360,18 +360,15 @@ for (const name of ["refine", "swarm", "habitat"] as const) {
 const habitatReceipt = evolutionRuns.get("habitat")!;
 
 // --- Hero proof -------------------------------------------------------------
-// The hero shows one real program beside the transcript of one real run.
-// scripts/vm-demo.ts starts examples/vm/release-review.algal.json, lets it
-// wait for an approval, ends the process, wakes it from a fresh process with
-// a mailbox message, and verifies the receipts offline. Every CLI call in
-// that script is its own OS process. site/launch/vm-demo-report.json is the
-// report the script wrote on 2026-10-13; every number below is read from it.
-const releaseReviewPath = join(ROOT, "examples/vm/release-review.algal.json");
-const releaseReview = asObject(JSON.parse(await readFile(releaseReviewPath, "utf8")) as unknown, "release-review manifest");
+// The hero shows the transcript of one real run. scripts/vm-demo.ts starts
+// examples/vm/release-review.algal.json, lets it wait for an approval, ends
+// the process, wakes it from a fresh process with a mailbox message, and
+// verifies the receipts offline. Every CLI call in that script is its own OS
+// process. site/launch/vm-demo-report.json is the report the script wrote on
+// 2026-10-13; every number below is read from it.
 const vmReport = asObject(JSON.parse(await readFile(join(SITE, "launch/vm-demo-report.json"), "utf8")) as unknown, "vm demo report");
 if (vmReport.ok !== true) throw new Error("The VM demo report must come from a run that passed");
 const vmProcess = asObject(vmReport.process, "vm report process");
-const vmBaseline = asObject(vmReport.baseline, "vm report baseline");
 const vmActors = (vmReport.actors as JsonObject[]).map(actor => asObject(actor, "vm actor"));
 const vmAlpha = vmActors.find(actor => actor.name === "alpha");
 if (!vmAlpha || vmAlpha.status !== "complete" || vmAlpha.generations !== 2 || vmAlpha.publications !== 1) {
@@ -383,40 +380,18 @@ const vmNumber = (value: unknown, label: string): number => {
 };
 const VM_DECISIONS = vmNumber(vmProcess.decisionInvocations, "decisionInvocations");
 const VM_RESUMED_DECISIONS = vmNumber(vmProcess.resumedDecisionInvocations, "resumedDecisionInvocations");
-const VM_BASELINE_DECISIONS = vmNumber(vmBaseline.decisionInvocations, "baseline decisionInvocations");
 const VM_VERIFIED_RECEIPTS = vmNumber(vmProcess.offlineVerifiedReceipts, "offlineVerifiedReceipts");
 const VM_VERIFY_DECISIONS = vmNumber(vmProcess.verificationDecisionInvocations, "verificationDecisionInvocations");
 const VM_CLI_PROCESSES = vmNumber(vmReport.cliInvocations, "cliInvocations");
-const VM_DUPLICATE_WAKES = vmNumber(vmProcess.duplicateWakeDeliveriesSuppressed, "duplicateWakeDeliveriesSuppressed");
 
 const heroIcon = (name: "arrow-up-right" | "download") => `<svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#${name}"></use></svg>`;
 
-const releaseReviewCells = (releaseReview.cells as JsonObject[]).map(cell => asObject(cell, "release-review cell"));
-const releaseReviewEdges = (releaseReview.edges as JsonObject[]).map(edge => asObject(edge, "release-review edge"));
-function cellNote(cell: JsonObject): string {
-  const id = String(cell.id);
-  const guarded = releaseReviewEdges.find(edge => asObject(edge.to, "edge target").cell === id && edge.guard !== undefined);
-  const guard = guarded ? asObject(guarded.guard, "edge guard") : undefined;
-  switch (cell.kind) {
-    case "input": return `receives ${Object.keys(asObject(cell.outputs, "input outputs")).join(", ")}`;
-    case "agent": return `model call: ${String(cell.prompt)}`;
-    case "tool": return guard ? `${String(cell.tool)}, only when ${String(guard.field)} is ${String(guard.equals)}` : String(cell.tool);
-    case "organism": return "child program that waits on the approvals mailbox";
-    case "expr": return "pure check: the approval names this release and says approve";
-    default: throw new Error(`release-review has an unexpected cell kind ${String(cell.kind)}`);
-  }
-}
-const HERO_PROGRAM = `<figure class="hr-program">
-  <figcaption class="hs-bar"><span class="file-label">examples/vm/release-review.algal.json</span><a href="/examples/release-review.algal.json" download>Source ${heroIcon("download")}</a></figcaption>
-  <ol class="hr-steps" aria-label="The cells of release-review.algal.json">${releaseReviewCells.map(cell =>
-    `<li><span class="hr-kind" data-kind="${escapeHtml(String(cell.kind))}">${escapeHtml(String(cell.kind))}</span><code class="hr-id">${escapeHtml(String(cell.id))}</code><span class="hr-note">${escapeHtml(cellNote(cell))}</span></li>`).join("")}</ol>
-  <p class="hr-facts"><span><b>${releaseReviewCells.length}</b> cells</span><span><b>${releaseReviewCells.filter(cell => cell.kind === "agent").length}</b> model call</span><span><b>1</b> wait</span><span>budget <b>${String(asObject(releaseReview.budgets, "budgets").maxAgentCalls)}</b> model call</span></p>
-</figure>`;
-
+// One object: the run as a tape of commands, with the three facts of the run
+// in its footer. Twelve lines at most.
 const transcript = (lines: { kind: "cmd" | "out" | "note"; text: string }[]) =>
   lines.map(line => `<span class="hr-line hr-${line.kind}">${line.kind === "cmd" ? `<span class="hr-prompt" aria-hidden="true">$ </span>` : ""}${escapeHtml(line.text)}</span>`).join("\n");
-const HERO_TRANSCRIPT = `<figure class="hr-run">
-  <figcaption class="hs-bar"><span class="file-label">One run · ${VM_CLI_PROCESSES} fresh processes</span><a href="/docs/vm/">The process VM ${heroIcon("arrow-up-right")}</a></figcaption>
+const HERO_RUN = `<figure class="hr-run">
+  <figcaption class="hs-bar"><span class="file-label">release-review.algal.json · one run, ${VM_CLI_PROCESSES} processes</span><a href="/docs/vm/">The process VM ${heroIcon("arrow-up-right")}</a></figcaption>
   <pre class="hr-pre" tabindex="0" aria-label="Transcript of the release-review run"><code>${transcript([
     { kind: "cmd", text: "algal process create alpha release-review.algal.json --args alpha.args.json --dir ./store" },
     { kind: "out", text: "status: ready        generation: 0" },
@@ -427,29 +402,23 @@ const HERO_TRANSCRIPT = `<figure class="hr-run">
     { kind: "out", text: "delivered           sent twice, delivered once" },
     { kind: "cmd", text: "algal process schedule --max-ticks 8 --dir ./store" },
     { kind: "out", text: "ticks: 1            resumed from the recorded prefix" },
-    { kind: "cmd", text: "algal process inspect alpha --dir ./store" },
-    { kind: "out", text: "status: complete     generation: 2     publications: 1" },
     { kind: "cmd", text: "algal process verify alpha --dir ./store" },
     { kind: "out", text: `ok: true             receipts: ${String(vmAlpha.verifiedReceipts)}     model calls: ${VM_VERIFY_DECISIONS}` },
   ])}</code></pre>
-  <dl class="hs-dl">
-    <div><dt>Decisions the model made</dt><dd>${VM_DECISIONS} across ${vmActors.length} programs</dd></div>
-    <div><dt>Decisions repeated after resume</dt><dd>${VM_RESUMED_DECISIONS}</dd></div>
-    <div><dt>Receipts verified offline</dt><dd>${VM_VERIFIED_RECEIPTS}</dd></div>
-  </dl>
-  <p class="hs-links"><a href="/launch/vm-demo-report.json" download>Run report ${heroIcon("download")}</a><a href="https://github.com/hraness/algal/blob/main/scripts/vm-demo.ts" target="_blank" rel="noopener">The script ${heroIcon("arrow-up-right")}</a></p>
+  <p class="hr-facts"><span><b>${VM_DECISIONS}</b> model decisions</span><span><b>${VM_RESUMED_DECISIONS}</b> repeated after resume</span><span><b>${VM_VERIFIED_RECEIPTS}</b> receipts verified offline</span><a href="/launch/vm-demo-report.json" download>Run report ${heroIcon("download")}</a></p>
 </figure>`;
-const HERO_RUN = `<div class="hero-run">${HERO_PROGRAM}${HERO_TRANSCRIPT}</div>`;
 
-// The measurement figure: the same program, with and without its checkpoint.
-const measureBar = (label: string, value: number, max: number, note: string) =>
-  `<li><span class="vm-measure__label">${escapeHtml(label)}</span><span class="vm-measure__bar" aria-hidden="true"><span style="inline-size:${Math.round((value / max) * 100)}%"></span></span><span class="vm-measure__value"><b>${value}</b> ${escapeHtml(note)}</span></li>`;
+// The measurement strip: the numbers of that same run.
+const metric = (value: number, label: string) =>
+  `<li><b>${value}</b><span>${escapeHtml(label)}</span></li>`;
 const VM_MEASURE = `<figure class="vm-measure">
-  <ol class="vm-measure__bars" aria-label="Decisions made by the release-review program, with and without its checkpoint">
-    ${measureBar("ALGAL, resumed from the recorded prefix", VM_DECISIONS, VM_BASELINE_DECISIONS, "decisions")}
-    ${measureBar("Same program, restarted from the top", VM_BASELINE_DECISIONS, VM_BASELINE_DECISIONS, "decisions")}
-  </ol>
-  <figcaption>Two copies of <code>release-review.algal.json</code> each wait for an approval, exit, and resume in a new process. The checkpoint keeps the recorded decision, so the resumed run makes ${VM_RESUMED_DECISIONS} new ones. A duplicate approval is delivered once (${VM_DUPLICATE_WAKES} duplicates dropped), and ${VM_VERIFIED_RECEIPTS} receipts verify offline with ${VM_VERIFY_DECISIONS} model calls. Measured by <code>bun scripts/vm-demo.ts</code> in this repository, where a scripted adapter answers the decision step.</figcaption>
+  <ul class="metric-strip" aria-label="Numbers from the release-review run">
+    ${metric(VM_RESUMED_DECISIONS, "decisions repeated after resume")}
+    ${metric(VM_VERIFIED_RECEIPTS, "receipts verified offline")}
+    ${metric(VM_VERIFY_DECISIONS, "model calls needed to verify")}
+    ${metric(VM_CLI_PROCESSES, "separate processes in one run")}
+  </ul>
+  <figcaption>From <a href="/launch/vm-demo-report.json">vm-demo-report.json</a>, written by <code>bun scripts/vm-demo.ts</code> with a scripted model adapter.</figcaption>
 </figure>`;
 
 // Presentation keeps the site's line break and emphasis without copying words.
