@@ -933,21 +933,46 @@ nav a[aria-current="page"] { color: var(--ink); }
 }
 /* Product landscape: end */
 
-/* The founder's own description, set as a note below the hero. */
+/* The founder's own description, set as a signed note below the hero. It reads in the
+ * text face at a conversational size; the display serif stays with the headings. */
 .founder-note {
-  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0 1.25rem;
-  max-width: 40rem; margin-block: 0.5rem 3rem;
-  padding-block: 1.75rem; border-block: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+  box-sizing: border-box; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.35rem 1rem; align-items: start;
+  max-width: 42rem; margin-block: 0.75rem 3rem;
+  padding: 1.5rem 1.6rem 1.3rem;
+  border: 1px solid color-mix(in srgb, currentColor 10%, transparent);
+  border-radius: 1.1rem;
+  background: color-mix(in srgb, var(--background, Canvas) 78%, transparent);
 }
-main .founder-note { margin-inline: 0; padding-inline: 0; }
-.founder-note__emoji { font-size: 2rem; line-height: 1; padding-block-start: 0.2rem; }
-.founder-note__body { display: grid; gap: 0.9rem; }
-.founder-note__body p {
-  margin: 0; font-family: var(--font-note, "Instrument Serif", "Iowan Old Style", "Palatino Linotype", Palatino, serif);
-  font-size: 1.375rem; line-height: 1.5; text-wrap: pretty; hanging-punctuation: first;
+main .founder-note { margin-inline: 0; }
+.founder-note__emoji {
+  display: grid; place-items: center; inline-size: 2.5rem; block-size: 2.5rem;
+  border-radius: 999px; background: color-mix(in srgb, var(--primary, currentColor) 10%, transparent);
+  font-size: 1.2rem; line-height: 1;
 }
-.founder-note__body .founder-note__signature { color: var(--muted); font-size: 1.25rem; }
+.founder-note__body {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline;
+  column-gap: 1rem; row-gap: 0.9rem; padding-block-start: 0.35rem;
+}
+.founder-note__body p { margin: 0; font-family: var(--font-text, var(--font-sans, ui-sans-serif, system-ui, sans-serif)); }
+.founder-note__body > p:first-child {
+  grid-column: 1 / -1; font-size: 1.1875rem; line-height: 1.55; letter-spacing: -0.008em;
+  color: var(--foreground, currentColor); text-wrap: pretty; hanging-punctuation: first;
+}
+.founder-note__signature { font-size: 0.9375rem; font-weight: 600; color: var(--foreground, currentColor); }
+.founder-note__signature::before {
+  content: ""; display: inline-block; inline-size: 1.25rem; block-size: 1px; margin-inline-end: 0.6rem;
+  vertical-align: 0.3em; background: currentColor; opacity: 0.45;
+}
+.founder-note__action { font-size: 0.9375rem; font-weight: 400; color: var(--muted, currentColor); }
+.founder-note__signature + .founder-note__action { grid-column: 2; justify-self: end; }
+.founder-note__action a {
+  font-weight: 500; color: var(--primary, inherit); text-decoration-style: solid;
+  text-decoration-color: color-mix(in srgb, currentColor 35%, transparent); text-underline-offset: 0.2em;
+}
+.founder-note__action a:hover { text-decoration-color: currentColor; }
 @media (max-width: 40rem) {
-  .founder-note { grid-template-columns: minmax(0, 1fr); gap: 0.75rem; }
-  .founder-note__body p { font-size: 1.25rem; }
+  .founder-note { grid-template-columns: minmax(0, 1fr); gap: 0.85rem; padding: 1.25rem 1.25rem 1.1rem; }
+  .founder-note__body { grid-template-columns: minmax(0, 1fr); padding-block-start: 0; row-gap: 0.75rem; }
+  .founder-note__body > p:first-child { font-size: 1.0625rem; }
+  .founder-note__signature + .founder-note__action { grid-column: 1; justify-self: start; }
 }

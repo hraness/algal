@@ -5,7 +5,7 @@
   "portfolio": {
     "contract": "hraness.portfolio-public/v1",
     "url": "https://hraness.com/portfolio.json",
-    "digest": "sha256:9fee76882f7ddfe3eadffc0a1acad6a8975b7b2fa8580433efadfcffe469c757"
+    "digest": "sha256:f22d8bdf1b765586ce4e862e410156bf18ff889feeacd2b55aad668e9d9f1022"
   },
   "messaging": {
     "formatVersion": 1,
@@ -31,7 +31,7 @@
     },
     "blurb": {
       "emoji": "🌱",
-      "text": "ALGAL is a programming language for agents that run for weeks. A program is data the host can inspect and run; it pauses for an approval, resumes after a restart, and replays from recorded effects. Programs evolve by proposing, evaluating, and adopting better versions of themselves, so the software accumulates competence instead of starting over.",
+      "text": "ALGAL is a programming language for agents that run for weeks. A program is data the host can inspect: it pauses for an approval, resumes after a restart, and replays from recorded effects. Programs propose, evaluate, and adopt better versions of themselves, so the software accumulates competence instead of starting over.",
       "cta": {
         "label": "Ask your agent to set it up",
         "url": "https://algal.computer"
@@ -197,7 +197,7 @@
       "messaging": {
         "names": {
           "name": "Sponge",
-          "command": "spongev2"
+          "command": "sponge"
         },
         "short": "Local deep research agent that writes cited reports and improves with each run",
         "tagline": "Deep research that runs on your machine"

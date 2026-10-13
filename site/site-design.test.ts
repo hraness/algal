@@ -151,14 +151,18 @@ test("the home page carries one signature moment, with a static final frame unde
   expect(home).toContain("{{VM_MEASURE}}");
 });
 
-test("the home page sets the founder's note directly below the hero in a serif face", () => {
+test("the home page sets the founder's note directly below the hero in the text face", () => {
   const home = pages["home.html"]!;
   expect(home.indexOf("hero-title")).toBeLessThan(home.indexOf('class="founder-note"'));
   expect(home.indexOf('class="founder-note"')).toBeLessThan(home.indexOf('id="lisp"'));
   expect(home).toContain("<p>{{SITE_BLURB}}</p>");
   expect(home).toContain('{{SITE_BLURB_CTA}}: <a href="{{SITE_BLURB_URL}}">algal.computer</a>');
   const styles = readFileSync(join(SITE, "styles.css"), "utf8");
-  const noteRule = styles.slice(styles.indexOf(".founder-note__body p {"));
-  expect(noteRule).toContain('"Instrument Serif"');
-  expect(noteRule.slice(0, noteRule.indexOf("}"))).not.toContain("Georgia");
+  // The note reads in the text face at a conversational size; the display serif stays with headings.
+  const noteRule = styles.slice(styles.indexOf(".founder-note {"), styles.indexOf(".founder-note__emoji {"));
+  expect(noteRule).not.toMatch(/Instrument Serif|Georgia|serif\b/u);
+  const bodyRule = styles.slice(styles.indexOf(".founder-note__body p {"));
+  expect(bodyRule.slice(0, bodyRule.indexOf("}"))).toContain("var(--font-text");
+  // Attribution precedes the action, so the quote reads as signed before it asks.
+  expect(home.indexOf("founder-note__signature")).toBeLessThan(home.indexOf("founder-note__action"));
 });
