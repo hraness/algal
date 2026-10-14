@@ -20,7 +20,7 @@ hraness-cli-kit = { git = "https://github.com/hraness/desktop-foundation", tag =
 libc = "=0.2.189"
 rusqlite = { version = "=0.40.2", default-features = false, features = ["bundled"] }
 reqwest = { version = "=0.12.28", default-features = false, features = ["json", "rustls-tls"] }
-ryu-js = "=1.0.2"
+ryu-js = "=1.0.3"
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.151"
 sha2 = "=0.10.9"
