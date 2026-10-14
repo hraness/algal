@@ -267,6 +267,7 @@ pub fn parse_event_loop_trace(value: &Value) -> Result<String> {
                         "expression-error",
                         "state-overflow",
                         "output-invalid",
+                        "output-overflow",
                     ],
                 )?;
                 if !decision["transition"].is_null() {

@@ -58,6 +58,22 @@ pub fn event_loop_notification_digest(
         "target":target, "type":kind, "payload":payload}),
     )
 }
+fn notification_bytes(
+    parent: &str,
+    transition: &str,
+    ordinal: usize,
+    target: &str,
+    kind: &str,
+    payload: &Value,
+) -> Result<usize> {
+    if ordinal >= 64 {
+        return Err(error("EVENT_LOOP_BOUNDS"));
+    }
+    bytes(
+        &json!({"parent":parent, "transition":transition, "ordinal":ordinal,
+        "target":target, "type":kind, "payload":payload}),
+    )
+}
 fn check_expr(expr: &Value, names: &BTreeSet<String>) -> Result<()> {
     if expr.is_null() {
         return Ok(());
@@ -128,13 +144,14 @@ fn evaluate_failure(
 // All writes and notifications remain uncommitted, even if evaluated earlier.
 fn derive_failure(
     entry: &Value,
+    actor: &str,
     rules: &[&Value],
     state: &Map<String, Value>,
     types: &BTreeMap<String, String>,
     schemas: &BTreeMap<String, BTreeMap<String, String>>,
-    limit: u64,
-    max_state: usize,
+    limits: (u64, usize, usize),
 ) -> Result<Option<Failure>> {
+    let (limit, max_state, max_event) = limits;
     let mut env = Map::new();
     env.insert("state".to_owned(), Value::Object(state.clone()));
     env.insert("event".to_owned(), entry["payload"].clone());
@@ -176,13 +193,27 @@ fn derive_failure(
     if bytes(&Value::Object(next))? > max_state {
         return Ok(Some(failure("state-overflow", selected, fuel)));
     }
-    for output in rule["outputs"].as_array().unwrap() {
+    for (ordinal, output) in rule["outputs"].as_array().unwrap().iter().enumerate() {
         let value = match evaluate_failure(&output["payload"], &env, &mut fuel, limit) {
             Ok(value) => value,
             Err(reason) => return Ok(Some(failure(reason, selected, fuel))),
         };
-        if !record(&value, &schemas[output["event"].as_str().unwrap()]) {
+        let kind = output["event"].as_str().unwrap();
+        if !record(&value, &schemas[kind]) {
             return Ok(Some(failure("output-invalid", selected, fuel)));
+        }
+        let target = output["target"].as_str().unwrap();
+        let resolved = if target == "self" { actor } else { target };
+        if notification_bytes(
+            entry["messageDigest"].as_str().unwrap(),
+            rule["id"].as_str().unwrap(),
+            ordinal,
+            resolved,
+            kind,
+            &value,
+        )? > max_event
+        {
+            return Ok(Some(failure("output-overflow", selected, fuel)));
         }
     }
     if rule["result"]["kind"] == "defer" || rule["result"]["kind"] == "escalate" {
@@ -273,6 +304,9 @@ pub fn replay_event_loop_trace(
     let max_state = trace["limits"]["maxStateBytes"]
         .as_u64()
         .ok_or_else(|| error("EVENT_LOOP_BOUNDS"))? as usize;
+    let max_event = trace["limits"]["maxEventBytes"]
+        .as_u64()
+        .ok_or_else(|| error("EVENT_LOOP_BOUNDS"))? as usize;
     for entry in trace["entries"]
         .as_array()
         .ok_or_else(|| error("EVENT_LOOP_PARSE"))?
@@ -282,8 +316,16 @@ pub fn replay_event_loop_trace(
             continue;
         }
         if claim["kind"] == "failed" {
-            let actual = derive_failure(entry, &rules, &state, &types, &schemas, limit, max_state)?
-                .ok_or_else(|| error("EVENT_LOOP_SEMANTIC"))?;
+            let actual = derive_failure(
+                entry,
+                trace["actor"].as_str().unwrap(),
+                &rules,
+                &state,
+                &types,
+                &schemas,
+                (limit, max_state, max_event),
+            )?
+            .ok_or_else(|| error("EVENT_LOOP_SEMANTIC"))?;
             let state_value = Value::Object(state.clone());
             if claim["reason"] != actual.reason
                 || claim["transition"].as_str() != actual.transition.as_deref()
@@ -363,21 +405,20 @@ pub fn replay_event_loop_trace(
                 let target = output["target"]
                     .as_str()
                     .ok_or_else(|| error("EVENT_LOOP_PARSE"))?;
+                let resolved = if target == "self" {
+                    trace["actor"].as_str().unwrap()
+                } else {
+                    target
+                };
+                let parent = entry["messageDigest"].as_str().unwrap();
+                let transition = rule["id"].as_str().unwrap();
+                if notification_bytes(parent, transition, ordinal, resolved, kind, &payload)?
+                    > max_event
+                {
+                    return Err(error("EVENT_LOOP_BOUNDS"));
+                }
                 outputs.push(event_loop_notification_digest(
-                    entry["messageDigest"]
-                        .as_str()
-                        .ok_or_else(|| error("EVENT_LOOP_PARSE"))?,
-                    rule["id"]
-                        .as_str()
-                        .ok_or_else(|| error("EVENT_LOOP_PARSE"))?,
-                    ordinal,
-                    if target == "self" {
-                        trace["actor"].as_str().unwrap()
-                    } else {
-                        target
-                    },
-                    kind,
-                    &payload,
+                    parent, transition, ordinal, resolved, kind, &payload,
                 )?);
             }
             if matches!(outcome, "defer" | "escalate") {

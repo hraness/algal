@@ -159,7 +159,7 @@ export function parseEventLoopTrace(value: unknown): { digest: string; entries: 
     } else {
       if (previous !== undefined || depth === maxMailbox) fail("EVENT_LOOP_SEMANTIC");
       if (kind === "failed") {
-        tag(decision.reason, ["fuel-exhausted", "expression-error", "state-overflow", "output-invalid"]);
+        tag(decision.reason, ["fuel-exhausted", "expression-error", "state-overflow", "output-invalid", "output-overflow"]);
         if (decision.transition !== null) id(decision.transition);
         const state = digest(decision.stateDigest);
         const resources = row(decision.resources, ["fuel", "stateBytes", "outputEvents"]);

@@ -44,7 +44,10 @@ The closed `decision` object has one of these shapes:
   `quarantine`. `reason` is an identifier. This is not a successful delivery.
 - `{kind: "failed", reason, transition, stateDigest, resources}` requires an
   unbound key and a depth below `maxMailboxDepth`. `reason` is one of
-  `fuel-exhausted`, `expression-error`, `state-overflow`, or `output-invalid`.
+  `fuel-exhausted`, `expression-error`, `state-overflow`, `output-invalid`, or
+  `output-overflow`. The latter means the evaluated, typed notification's
+  complete canonical envelope exceeds the pinned `maxEventBytes`; an accepted
+  claim of the same oversize output fails replay with `EVENT_LOOP_BOUNDS`.
   `transition` names a declared transition for the input event, or is `null` if
   selection did not finish. For a non-null identifier, the structural join
   checks the event declaration and rejects a selected id when an earlier

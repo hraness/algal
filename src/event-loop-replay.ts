@@ -18,23 +18,28 @@ type Behavior = { actors: Array<{id: string; state: {fields: Array<{name: string
 type Decision = {kind: string; transition: string | null; outcome: string; reason?: string; stateDigest: string;
   outputs: string[]; pending?: JsonValue; effects: {requested: number; settled: number; receipts: string[]};
   resources: {fuel: number; stateBytes: number; outputEvents: number}};
-type Trace = {actor: string; limits: {maxStateBytes: number; maxTransitionFuel: number};
+type Trace = {actor: string; limits: {maxEventBytes: number; maxStateBytes: number; maxTransitionFuel: number};
   entries: Array<{type: string; payload: JsonValue; messageDigest: string; decision: Decision}>};
-type Failure = {reason: "fuel-exhausted" | "expression-error" | "state-overflow" | "output-invalid";
+type Failure = {reason: "fuel-exhausted" | "expression-error" | "state-overflow" | "output-invalid" | "output-overflow";
   transition: string | null; fuel: number};
+
+function notification(parent: string, transition: string, ordinal: number,
+  target: string, type: string, payload: JsonValue): JsonObject {
+  if (!Number.isSafeInteger(ordinal) || ordinal < 0 || ordinal >= 64) fail("EVENT_LOOP_BOUNDS");
+  return {parent, transition, ordinal, target, type, payload};
+}
 
 /** Identity of one checked notification. A parent delivery, transition and
  * bounded ordinal distinguish two otherwise identical notifications. */
 export function eventLoopNotificationDigest(parent: string, transition: string, ordinal: number,
   target: string, type: string, payload: JsonValue): string {
-  if (!Number.isSafeInteger(ordinal) || ordinal < 0 || ordinal >= 64) fail("EVENT_LOOP_BOUNDS");
-  return hash({parent, transition, ordinal, target, type, payload});
+  return hash(notification(parent, transition, ordinal, target, type, payload));
 }
 
 // Re-evaluate a failed input from the *unchanged* state. The first failing
 // operation determines the reason, selected rule and measured fuel. No write
 // or notification is committed, including those evaluated before the failure.
-function deriveFailure(entry: Trace["entries"][number], rules: Rule[], state: JsonObject,
+function deriveFailure(entry: Trace["entries"][number], actor: string, rules: Rule[], state: JsonObject,
   types: Map<string, string>, schemas: Map<string, Map<string, string>>,
   limits: Trace["limits"]): Failure | null {
   const env: JsonObject = {state, event: entry.payload};
@@ -67,10 +72,14 @@ function deriveFailure(entry: Trace["entries"][number], rules: Rule[], state: Js
     next[write.path[0]] = value.value;
   }
   if (bytes(next) > limits.maxStateBytes) return failure("state-overflow");
-  for (const output of selected.outputs) {
+  for (const [ordinal, output] of selected.outputs.entries()) {
     const payload = evaluate(output.payload);
     if (!payload.ok) return failure(payload.reason);
     if (!record(payload.value, schemas.get(output.event)!)) return failure("output-invalid");
+    const target = output.target === "self" ? actor : output.target;
+    if (bytes(notification(entry.messageDigest, selected.id, ordinal, target, output.event, payload.value)) > limits.maxEventBytes) {
+      return failure("output-overflow");
+    }
   }
   if (selected.result.kind === "defer" || selected.result.kind === "escalate") {
     const pending = selected.result.kind === "defer" ? selected.result.key! : selected.result.request!;
@@ -117,7 +126,7 @@ export function replayEventLoopTrace(traceValue: unknown, behaviorValue: unknown
     const claim = entry.decision;
     if (claim.kind === "duplicate" || claim.kind === "backpressure") continue;
     if (claim.kind === "failed") {
-      const actual = deriveFailure(entry, rules, state, types, schemas, trace.limits);
+      const actual = deriveFailure(entry, trace.actor, rules, state, types, schemas, trace.limits);
       if (!actual || claim.reason !== actual.reason || claim.transition !== actual.transition ||
           claim.resources.fuel !== actual.fuel || claim.stateDigest !== hash(state) ||
           claim.resources.stateBytes !== bytes(state) || claim.resources.outputEvents !== 0) {
@@ -157,7 +166,9 @@ export function replayEventLoopTrace(traceValue: unknown, behaviorValue: unknown
         const payload = evaluate(output.payload);
         if (!record(payload, schemas.get(output.event)!)) fail("EVENT_LOOP_SCHEMA");
         const target = output.target === "self" ? trace.actor : output.target;
-        outputs.push(eventLoopNotificationDigest(entry.messageDigest, selected.id, ordinal, target, output.event, payload));
+        const envelope = notification(entry.messageDigest, selected.id, ordinal, target, output.event, payload);
+        if (bytes(envelope) > trace.limits.maxEventBytes) fail("EVENT_LOOP_BOUNDS");
+        outputs.push(hash(envelope));
       }
       if (selected.result.kind === "defer" || selected.result.kind === "escalate") {
         const pending = evaluate(selected.result.kind === "defer" ? selected.result.key! : selected.result.request!);
