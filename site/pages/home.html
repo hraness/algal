@@ -4,13 +4,12 @@
     <p class="eyebrow"><svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#terminal"></use></svg>{{SITE_CATEGORY}}</p>
     <h1 id="hero-title" class="hraness-marketing-hero__heading">{{SITE_HERO_HEADING}}</h1>
     <p class="lede hraness-marketing-hero__summary">{{SITE_HERO_SUMMARY}}</p>
-    <div class="hraness-marketing-hero__install" id="install">{{PLATFORM_INSTALL}}</div>
     <div class="hero-actions">
+      <a class="hraness-marketing-action" data-emphasis="primary" href="#install">{{SITE_PRIMARY_ACTION}}</a>
       <a class="hero-secondary" href="/docs/source-language/">{{SITE_SECONDARY_ACTION}} <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-right"></use></svg></a>
     </div>
     <p class="hero-meta">Open source · MIT license · TypeScript and Rust runtimes · macOS, Linux, and algal.cloud</p>
     <div class="hero-proof" data-hero-proof>
-      <p class="hero-proof__lede">A real program and the transcript of one real run: it proposes, waits for an approval, exits, resumes in a new process, and verifies offline.</p>
       {{HERO_RUN}}
     </div>
   </section>
@@ -25,46 +24,8 @@
     </div>
   </section>
 
-  <section class="audience-section" id="who" aria-labelledby="who-title">
-    <div class="section-heading"><div><p class="eyebrow">Who it is for</p><h2 id="who-title" class="hraness-marketing-section__heading">For agents that wait on people,<br><em>restarts, and reviews.</em></h2></div><p>Durable execution for agent work: the run outlives the process that started it, and the record outlives the run.</p></div>
-    <div class="audience-grid">
-      <article class="audience-card"><h3>Teams with a person in the loop</h3><p>Release reviews, change requests, drafts that someone signs off. The program puts its proposal in a mailbox and waits. The process goes away until the answer arrives.</p></article>
-      <article class="audience-card"><h3>Applications that embed agents</h3><p>Your host decides which tools, models, and budgets a program gets, and inspects the program before it runs. A program cannot widen its own permissions.</p></article>
-      <article class="audience-card"><h3>Builders who want programs to improve</h3><p>A program proposes a better version of itself. Your host evaluates candidates on your cases and adopts the winner, with its history kept.</p></article>
-    </div>
-  </section>
-
-  <section class="source-section lisp-section" id="lisp" aria-labelledby="lisp-title">
-    <div class="section-heading"><div><p class="eyebrow">The idea</p><h2 id="lisp-title" class="hraness-marketing-section__heading">A program is a value your system<br><em>can read, write, and keep.</em></h2></div><p>An ALGAL program is typed data: a graph of steps, model calls, and tools with a content-derived identity. Readable source lowers to the same program, so a person, a macro, or a model can write one, and the host checks it the same way.</p></div>
-    <div class="program-window">
-      <div class="window-bar"><span class="file-label">quote.lisp</span></div>
-      <div class="program-comparison">
-        <div class="source-pane">
-          <div class="pane-heading"><span class="eyebrow">01 / Write it as an S-expression</span></div>
-          <pre class="source-code"><code>(program quote ((order json)) json
-  (with-total subtotal
-    (* (get order quantity) (get order unit_price))
-    (record subtotal subtotal
-            shipping (if (&gt;= subtotal 50) 0 5)
-            total (+ subtotal (if (&gt;= subtotal 50) 0 5)))))</code></pre>
-          <div class="source-annotation"><span class="annotation-line" aria-hidden="true"></span><p><strong>The macro expansion is printed and hashed.</strong><br>Generated code stays inspectable, and the program digest matches the readable source exactly.</p></div>
-        </div>
-        <div class="source-pane">
-          <div class="pane-heading"><span class="eyebrow">02 / Compose it</span></div>
-          <pre class="source-code"><code>(program gross ((order json)) json
-  (let gross (* (get order price) (get order quantity))
-    (let tax (* gross 0.08)
-      (record gross gross tax tax total (+ gross tax)))))</code></pre>
-          <div class="source-annotation"><span class="annotation-line" aria-hidden="true"></span><p><strong>Immutable bindings, bounded fuel, no hidden effects.</strong><br>Syntax never grants permissions. Waits, tools, and limits are declared in the program.</p></div>
-        </div>
-      </div>
-    </div>
-    <p class="under-note">Once a procedure works, it keeps its digest, its record, and its place in every larger program that calls it. <a href="/docs/source-language/">Read the language guide</a>.</p>
-  </section>
-
   <section class="life-section" id="what" aria-labelledby="life-title">
-    <div class="section-heading"><div><p class="eyebrow">What it does</p><h2 id="life-title" class="hraness-marketing-section__heading">{{HEADING_HOME_PROCESS}}</h2></div><p>A program pauses at an approval, the process exits, and the same program continues later on another machine from its recorded prefix. Finished work is never repeated.</p></div>
-
+    <div class="section-heading"><div><p class="eyebrow">What it does</p><h2 id="life-title" class="hraness-marketing-section__heading">{{HEADING_HOME_PROCESS}}</h2></div><p>A program stops for an approval, the process exits, and another machine continues from the record.</p></div>
     <figure class="pause-figure" data-hraness-signature="pause-resume">
       <div class="pf-stage" aria-hidden="true">
         <div class="pf-lane pf-lane--first">
@@ -89,72 +50,47 @@
           </ol>
         </div>
       </div>
-      <figcaption>Pause and resume. The first process records two steps and stops at the approval. When the approval arrives, a second process on another machine reads the recorded prefix (shown dashed) instead of repeating it, then runs the remaining steps to completion.</figcaption>
-    </figure>
-
-    <div class="life-grid">
-      <article class="life-card"><span class="capability-label"><svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#hourglass"></use></svg>waits</span><p>Wait for an approval or a message on a mailbox the host granted. The process exits; the checkpoint holds the place.</p></article>
-      <article class="life-card"><span class="capability-label"><svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#history"></use></svg>resumes</span><p>Continue in a new process, on a new machine, from the recorded prefix. A write with an unknown outcome stays blocked until it is reconciled.</p></article>
-      <article class="life-card"><span class="capability-label"><svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#brain"></use></svg>decides</span><p>Give each model call its own context, expected answer shape, and budget. Everything around it is deterministic logic.</p></article>
-      <article class="life-card"><span class="capability-label"><svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#memory"></use></svg>replays</span><p>Every model call and tool result is recorded. Replay a run and check it offline, without a model, a store, or credentials.</p></article>
-      <article class="life-card"><span class="capability-label"><svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#dna"></use></svg>reproduces</span><p>A program proposes another program. The host checks it before running it inside the parent's limits.</p></article>
-      <article class="life-card"><span class="capability-label"><svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#leaf"></use></svg>evolves</span><p>Evaluate candidate programs on your cases and adopt the ones that win. Their scores and lineage are kept.</p></article>
-    </div>
-  </section>
-
-  <section class="habitat-section" id="how" aria-labelledby="how-title">
-    <div class="section-heading"><div><p class="eyebrow">How it works</p><h2 id="how-title" class="hraness-marketing-section__heading">{{HEADING_HOME_HOST}}</h2></div><p>The program is data. A host runtime executes it, records each effect, and can replay the record. The approval mailbox is how a person or another program reaches a waiting run.</p></div>
-    <figure class="mechanism" aria-labelledby="mechanism-caption">
-      <ol class="mechanism__flow">
-        <li class="mechanism__node" data-node="program"><span class="mechanism__kicker">01 · Program</span><strong>Typed data</strong><p>A JSON graph of steps, model calls, and tools, identified by its digest. The host inspects it before running it.</p></li>
-        <li class="mechanism__node" data-node="runtime"><span class="mechanism__kicker">02 · Host runtime</span><strong>TypeScript or Rust</strong><p>Runs the program with the tools, models, and budgets the host grants. Both runtimes share the program and record formats.</p><span class="mechanism__mailbox"><svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#hourglass"></use></svg>Approval mailbox: a waiting run resumes when a message arrives</span></li>
-        <li class="mechanism__node" data-node="record"><span class="mechanism__kicker">03 · Recorded effects</span><strong>Receipts</strong><p>Every model call and tool result, with the checkpoint that lets a new process continue from the prefix.</p></li>
-        <li class="mechanism__node" data-node="verify"><span class="mechanism__kicker">04 · Replay and verify</span><strong>Offline</strong><p>Replay the program over its record and check every step, with no model, no store, and no credentials.</p></li>
-      </ol>
-      <figcaption id="mechanism-caption">From program to verified run. Run a program with the native CLI or the TypeScript runtime; either can resume a run the other started from a shared store. <a href="/docs/habitats/">The habitat model</a> · <a href="/docs/why-unique/">What distinguishes the design</a></figcaption>
+      <figcaption>Pause and resume. The dashed steps are read from the record, not run again.</figcaption>
     </figure>
   </section>
 
   <section class="source-section" id="language" aria-labelledby="source-title">
-    <div class="section-heading"><div><p class="eyebrow">One real example</p><h2 id="source-title" class="hraness-marketing-section__heading">{{HEADING_HOME_DRAFT}}</h2></div><p>This program classifies an email and drafts a reply. Open the source beside the graph to follow each step.</p></div>
+    <div class="section-heading"><div><p class="eyebrow">One program</p><h2 id="source-title" class="hraness-marketing-section__heading">{{HEADING_HOME_DRAFT}}</h2></div><p>One model call reads the email, a plain <code>match</code> picks the task, and a second call drafts the reply.</p></div>
     <div class="program-window">
-      <div class="window-bar"><span class="file-label"><svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#terminal"></use></svg>reply.algal</span><span class="window-note">One program, two views</span></div>
+      <div class="window-bar"><span class="file-label"><svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#terminal"></use></svg>reply.algal</span><a href="/examples/reply.algal" download>Source <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#download"></use></svg></a></div>
       <div class="program-comparison">
         <div class="source-pane">
-          <div class="pane-heading"><span class="eyebrow">01 / Read the intent</span><a href="/examples/reply.algal" download>Source <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#download"></use></svg></a></div>
-          <pre class="source-code"><code>{{REPLY_SOURCE}}</code></pre>
-          <div class="source-annotation">
-            <span class="annotation-line" aria-hidden="true"></span>
-            <p><strong>The model classifies the email, a pure <code>match</code> picks the task, and the model drafts the reply.</strong><br>Each model call sees only the context named after <code>using</code>.</p>
-          </div>
-          <div class="source-facts"><span><b>{{REPLY_MAX_AGENT_CALLS}}</b> model attempts, at most</span><span><b>0</b> model calls in <code>match</code></span></div>
+          <pre class="source-code" tabindex="0"><code>{{REPLY_SOURCE}}</code></pre>
         </div>
         <figure class="graph-pane">
-          <div class="pane-heading"><span class="eyebrow">02 / See the structure</span><a href="/diagrams/reply.svg" target="_blank" rel="noopener">Expand <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-up-right"></use></svg></a></div>
           <div class="diagram-frame diagram-frame-embed" data-diagram-view="/diagrams/reply.view.json">
             <img class="reply-diagram" src="/diagrams/reply.svg" alt="Generated reply program graph: email flows into a typed decision, a pure decision check and match, then generation. Email also flows directly into generation as explicit context." width="480" height="730" loading="lazy">
           </div>
-          <figcaption>Select a step to inspect its inputs, output, and connection to the source.</figcaption>
+          <figcaption>Select a step to inspect its inputs and output.</figcaption>
         </figure>
       </div>
-      <div class="window-footer"><span><span class="legend-dot model" aria-hidden="true"></span>Model judgment</span><span><span class="legend-dot pure" aria-hidden="true"></span>Deterministic logic</span><a href="/examples/reply.algal.json">Inspect the executable program <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-up-right"></use></svg></a></div>
+      <div class="window-footer"><span><span class="legend-dot model" aria-hidden="true"></span>Model judgment</span><span><span class="legend-dot pure" aria-hidden="true"></span>Deterministic logic</span><a href="/examples/reply.algal.json">The executable program <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-up-right"></use></svg></a></div>
     </div>
-    <p class="under-note">ALGAL checks the program before it runs. Each model call receives only the context you name in the source. <a href="/tour/">Walk through more programs on the tour</a>.</p>
+  </section>
+
+  <section class="habitat-section" id="how" aria-labelledby="how-title">
+    <div class="section-heading"><div><p class="eyebrow">How it works</p><h2 id="how-title" class="hraness-marketing-section__heading">{{HEADING_HOME_HOST}}</h2></div><p>The program is data. Your host grants its tools and budgets and records every effect.</p></div>
+    <ol class="icon-row">
+      <li><svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#file-check"></use></svg><b>Check</b><span>Budgets are read before anything runs.</span></li>
+      <li><svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#cpu"></use></svg><b>Run</b><span>Calls use only what the host grants.</span></li>
+      <li><svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#database"></use></svg><b>Record</b><span>Each step lands in a durable store.</span></li>
+      <li><svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#replay"></use></svg><b>Replay</b><span>The record verifies offline.</span></li>
+    </ol>
+    <p class="section-link"><a href="/docs/habitats/">How a host runs a program <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-right"></use></svg></a></p>
   </section>
 
   <section class="artifact-section" id="replay" aria-labelledby="replay-title">
-    <div class="section-intro"><p class="eyebrow">Measured</p><h2 id="replay-title" class="hraness-marketing-section__heading">{{HEADING_HOME_REPLAY}}</h2><p>A saved run records which steps ran and what they returned. Resume it without repeating work, replay its logic, or compare it with another run.</p></div>
+    <div class="section-heading"><div><p class="eyebrow">Measured</p><h2 id="replay-title" class="hraness-marketing-section__heading">{{HEADING_HOME_REPLAY}}</h2></div><p>The release-review program waited for an approval, exited, and resumed in a new process.</p></div>
     {{VM_MEASURE}}
-    <ol class="artifact-flow">
-      <li><span class="step-number">01</span><h3>{{HEADING_HOME_REPLAY_VERIFY}}</h3><p>Replay the program logic over its recorded model and tool results, without contacting either service.</p></li>
-      <li><span class="step-number">02</span><h3>{{HEADING_HOME_REPLAY_DIFF}}</h3><p>See which steps and work counts changed between two runs of the same program.</p></li>
-      <li><span class="step-number">03</span><h3>{{HEADING_HOME_REPLAY_DIAGNOSE}}</h3><p>Find the source expression behind a failure, with the run record beside the source.</p></li>
-    </ol>
   </section>
 
   <section class="evolution-section" id="evolution" aria-labelledby="evolution-title">
-    <p class="eyebrow">Evolution</p>
-    <div class="section-heading"><h2 id="evolution-title" class="hraness-marketing-section__heading">{{HEADING_HOME_EVOLUTION}}</h2><p>An ALGAL program, called an organism in the specification, can propose another program. The host evaluates candidates on declared cases and adopts the winner. Software that accumulates competence instead of starting over.</p></div>
+    <div class="section-heading"><div><p class="eyebrow">Programs that improve</p><h2 id="evolution-title" class="hraness-marketing-section__heading">{{HEADING_HOME_EVOLUTION}}</h2></div><p>A program (an organism, in the specification) proposes a candidate. Your host scores it and keeps the winner.</p></div>
     <figure class="generations" aria-labelledby="generations-caption">
       <ol class="generations__row" aria-hidden="true">
         <li class="generations__gen"><span class="generations__label">Generation 1</span><span class="generations__cands"><i></i><i class="is-adopted"></i><i></i></span></li>
@@ -162,47 +98,28 @@
         <li class="generations__gen"><span class="generations__label">Generation 3</span><span class="generations__cands"><i class="is-adopted"></i><i></i><i></i></span></li>
         <li class="generations__gen generations__gen--kept"><span class="generations__label">Kept</span><span class="generations__cands"><i class="is-adopted is-kept"></i></span></li>
       </ol>
-      <figcaption id="generations-caption">Propose, evaluate, adopt. Each generation proposes candidates, the host scores them on your cases, and the adopted candidate (filled) seeds the next generation. The kept program carries its scores and lineage.</figcaption>
+      <figcaption id="generations-caption">Propose, evaluate, adopt. The filled candidate seeds the next generation.</figcaption>
     </figure>
-    <ol class="lineage-flow" aria-label="The selection loop">
-      <li><span>01 / propose</span><strong>Candidate programs</strong><p>Plans or programs written by a model or a macro</p></li>
-      <li><span>02 / check</span><strong>Programs with declared limits</strong><p>Host compilation and checks before anything runs</p></li>
-      <li><span>03 / evaluate</span><strong>Scores on your cases</strong><p>Declared cases and work budgets</p></li>
-      <li><span>04 / adopt</span><strong>Keep the winner</strong><p>Your host's choice, with its history</p></li>
-    </ol>
-    <div class="epoch-note">
-      <p>Run the selection loop with Apple Intelligence on a Mac. It requires Xcode and builds a separate model bridge on first use.</p>
-      <figure class="hraness-marketing-proof-frame" data-hraness-marketing="proof-frame"><div aria-hidden="true" class="hraness-marketing-proof-frame__chrome"><span class="hraness-marketing-proof-frame__lights"><span class="hraness-marketing-proof-frame__light"></span><span class="hraness-marketing-proof-frame__light"></span><span class="hraness-marketing-proof-frame__light"></span></span><span class="hraness-marketing-proof-frame__title">Apple Intelligence · Terminal</span></div><div class="hraness-marketing-proof-frame__content"><pre class="algal-terminal-code" tabindex="0" aria-label="Run the Apple Intelligence selection example"><code class="syntax-code language-shell" data-language="shell">{{CIVILIZATION_EXAMPLE}}</code></pre></div></figure>
-      <p><a href="/docs/civilization/">Civilization workflows <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-up-right"></use></svg></a> · <a href="/docs/habitats/">Habitats and self-reproduction <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-up-right"></use></svg></a> · <a href="/tour/#grow">Watch an organism propose a child on the tour <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-right"></use></svg></a></p>
-    </div>
+    <p class="section-link"><a href="/tour/#grow">See the tour <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-right"></use></svg></a></p>
   </section>
 
-  <section class="try-section" id="install-details" aria-labelledby="try-title">
-    <div class="section-intro"><p class="eyebrow">Get started</p><h2 id="try-title" class="hraness-marketing-section__heading">{{HEADING_HOME_INSTALL}}</h2><p>Install the native CLI and run the built-in approval demo. It needs no model account or development tools.</p>{{PLATFORM_BADGES}}<p><a href="https://github.com/hraness/algal/releases">Download an archive from the releases page <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-up-right"></use></svg></a></p><p><a href="/docs/native-release/">Checksums, install instructions, and platform support <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-up-right"></use></svg></a></p></div>
-    <div class="try-steps">{{INSTALL_TERMINAL}}</div>
+  <section class="try-section" id="install" aria-labelledby="install-title">
+    <div class="section-heading"><div><p class="eyebrow">Get started</p><h2 id="install-title" class="hraness-marketing-section__heading">{{HEADING_HOME_INSTALL}}</h2></div><p>One native binary for macOS and Linux. The built-in approval demo needs no model account.</p></div>
+    <div class="hraness-marketing-hero__install">{{PLATFORM_INSTALL}}</div>
+    <p class="section-link"><a href="/docs/native-release/">Releases and checksums <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-right"></use></svg></a></p>
   </section>
 
   <section class="compare-section" id="compare" aria-labelledby="compare-title">
-    <div class="section-heading"><div><p class="eyebrow">Compare</p><h2 id="compare-title" class="hraness-marketing-section__heading">If you run Temporal, Restate,<br><em>Inngest, or LangGraph.</em></h2></div><p>ALGAL shares their vocabulary: durable execution, workflows, checkpoints, replay, human-in-the-loop approval. The difference is that the workflow is data a host can inspect, hash, and run, not code in your process.</p></div>
-    <ul class="compare-list">
-      <li><a href="/compare/temporal/"><strong>Temporal</strong><span>keeps workflow history in its service; ALGAL writes each run to a receipt that verifies offline</span></a></li>
-      <li><a href="/compare/restate/"><strong>Restate</strong><span>journals handlers inside a server; ALGAL needs no server between invocations</span></a></li>
-      <li><a href="/compare/inngest/"><strong>Inngest</strong><span>checkpoints functions on a cloud that bills per step; ALGAL runs from a local binary with no meter</span></a></li>
-      <li><a href="/compare/langgraph/"><strong>LangGraph</strong><span>builds agents as code in your process; ALGAL's programs are typed data a VM runs</span></a></li>
-      <li><a href="/compare/"><strong>All comparisons</strong><span>including DSPy and BAML</span></a></li>
-    </ul>
-  </section>
-
-  <section class="idea-section" id="idea" aria-labelledby="idea-title">
-    <div><p class="eyebrow">The vision</p><h2 id="idea-title" class="hraness-marketing-section__heading">{{HEADING_HOME_RESEARCH}}</h2></div>
-    <div class="idea-copy">
-      <p>Yes. A model proposes a procedure, the host tests it on cases you choose and keeps it, and each kept procedure raises the floor for the next task. ALGAL is the runtime for that loop: a portable, record-carrying actor runtime for evolving software habitats.</p>
-      <p><a href="/docs/vision/">Read the vision <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-up-right"></use></svg></a><a href="/docs/lineage/">Where the idea comes from <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-up-right"></use></svg></a></p>
-    </div>
-  </section>
-
-  <section class="adoption-section" aria-labelledby="adoption-title">
-    <div><p class="eyebrow">Where it runs</p><h2 id="adoption-title" class="hraness-marketing-section__heading">{{HEADING_HOME_LIMITS}}</h2></div>
-    <div class="adoption-copy">{{ADOPTION_BOUNDARY}}<p>The <a href="/docs/use-cases/#choose-the-right-boundary">adoption guide</a> maps each job to a first program.</p><p><a href="/use-cases/">Choose a first use case <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-right"></use></svg></a></p></div>
+    <div class="section-heading"><div><p class="eyebrow">Compared</p><h2 id="compare-title" class="hraness-marketing-section__heading">If you run Temporal, Restate,<br><em>Inngest, or LangGraph.</em></h2></div><p>Here the workflow is data a host can inspect, hash, and run.</p></div>
+    <table class="compare-table">
+      <thead><tr><th scope="col">If you use</th><th scope="col">ALGAL differs in</th></tr></thead>
+      <tbody>
+        <tr><th scope="row">Temporal or Restate</th><td>The workflow is a hashed program, not host code.</td></tr>
+        <tr><th scope="row">Inngest</th><td>A step is a typed model decision or a pure expression.</td></tr>
+        <tr><th scope="row">LangGraph</th><td>The graph cannot call your process; the host grants every tool.</td></tr>
+        <tr><th scope="row">A plain agent loop</th><td>The run pauses for people, exits, and resumes elsewhere.</td></tr>
+      </tbody>
+    </table>
+    <p class="section-link"><a href="/docs/why-unique/">All comparisons <svg class="site-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><use href="/icons.svg#arrow-right"></use></svg></a></p>
   </section>
 </main>

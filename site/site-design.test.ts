@@ -82,8 +82,8 @@ test("page metadata is escaped, so a quote in a derived description cannot end t
   expect(document).toContain(JSON.stringify(SITE_DESCRIPTION));
 });
 
-test("the home and use-cases pages both describe where ALGAL runs from one constant", () => {
-  for (const page of ["home.html", "use-cases.html"]) expect(pages[page]).toContain("{{ADOPTION_BOUNDARY}}");
+test("the use-cases page describes where ALGAL runs from one constant", () => {
+  expect(pages["use-cases.html"]).toContain("{{ADOPTION_BOUNDARY}}");
   for (const limit of ["algal.cloud", "tool permissions", "habitat", "replay a run"]) {
     expect(ADOPTION_BOUNDARY).toContain(limit);
   }
@@ -154,7 +154,7 @@ test("the home page carries one signature moment, with a static final frame unde
 test("the home page sets the founder's note directly below the hero in the text face", () => {
   const home = pages["home.html"]!;
   expect(home.indexOf("hero-title")).toBeLessThan(home.indexOf('class="founder-note"'));
-  expect(home.indexOf('class="founder-note"')).toBeLessThan(home.indexOf('id="lisp"'));
+  expect(home.indexOf('class="founder-note"')).toBeLessThan(home.indexOf('id="what"'));
   expect(home).toContain("<p>{{SITE_BLURB}}</p>");
   expect(home).toContain('{{SITE_BLURB_CTA}}: <a href="{{SITE_BLURB_URL}}">algal.computer</a>');
   const styles = readFileSync(join(SITE, "styles.css"), "utf8");
