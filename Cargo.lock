@@ -25,7 +25,7 @@ dependencies = [
  "anyhow",
  "apple-foundation",
  "clap",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "hraness-cli-kit",
  "hraness-cli-update",
  "libc",
