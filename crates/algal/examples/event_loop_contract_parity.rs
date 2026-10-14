@@ -5,14 +5,20 @@ use algal::{
 };
 use serde_json::{Value, json};
 
+const MAX_VECTORS: usize = 128;
+
+fn valid_vector_count(count: usize) -> bool {
+    (1..=MAX_VECTORS).contains(&count)
+}
+
 fn main() -> Result<()> {
     // Task-owned offline vectors, never host or provider input. The script
     // passes the exact same JSON values to the TypeScript parser.
     let input = read_json(std::io::stdin().lock(), 4_194_304)?;
     let vectors = input
         .as_array()
-        .filter(|items| !items.is_empty() && items.len() <= 64)
-        .ok_or_else(|| algal::Error::invalid("expected 1..64 event-loop vectors"))?;
+        .filter(|items| valid_vector_count(items.len()))
+        .ok_or_else(|| algal::Error::invalid("expected 1..128 event-loop vectors"))?;
     let mut results = Vec::new();
     for item in vectors {
         let name = item["name"]
@@ -27,4 +33,17 @@ fn main() -> Result<()> {
     }
     println!("{}", canonical(&Value::Array(results))?);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::valid_vector_count;
+
+    #[test]
+    fn offline_vector_count_has_both_edges() {
+        assert!(!valid_vector_count(0));
+        assert!(valid_vector_count(1));
+        assert!(valid_vector_count(128));
+        assert!(!valid_vector_count(129));
+    }
 }

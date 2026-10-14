@@ -77,6 +77,23 @@ add("invalid-actor", () => {}, "EVENT_LOOP_ID", "Bad Actor");
 add("invalid-initial-size", (b) => { b.actors[0].state.fields[0].type = "string";
   b.actors[0].state.fields[0].initial = "x".repeat(16_384); }, "EVENT_LOOP_BOUNDS");
 add("stale-metadata", (b) => { b.behavior.revision++; }, "EVENT_LOOP_DIGEST");
+
+// Missing fields are rehashed at the root, including unused event declarations.
+// These test the pre-execution behavior parser rather than a trace's digest.
+const omissions = [
+  ["contract", (b: any) => { delete b.contract; }],
+  ...(["maxEventBytes", "maxStateBytes", "maxOutputEvents", "maxTransitionFuel", "maxMailboxDepth"] as const)
+    .map((field) => [`limits-${field}`, (b: any) => { delete b.limits[field]; }] as const),
+  ["event-id", (b: any) => { delete b.events[2].id; }],
+  ["unused-event-field-type", (b: any) => { delete b.events[2].payload.fields[0].type; }],
+  ["actor-id", (b: any) => { delete b.actors[0].id; }],
+  ["state-field-type", (b: any) => { delete b.actors[0].state.fields[0].type; }],
+  ["output-kind", (b: any) => { delete b.actors[0].transitions[0].outputs[0].kind; }],
+] as const;
+for (const [name, omit] of omissions) add(`${name}-missing`, omit, "EVENT_LOOP_PARSE");
+add("behavior-limit-extra", (b) => { b.limits.timeout = 1; }, "EVENT_LOOP_UNKNOWN_KEY");
+
+if (vectors.length > 64) throw new Error("behavior vector count exceeds Rust parity input limit");
 const ts = vectors.map(({name, actor, behavior}) => {
   try { return {name, result: summarizeEventLoopBehavior(behavior, actor)}; }
   catch (error) { if (!(error instanceof EventLoopContractError)) throw error; return {name, result: {code: error.code}}; }

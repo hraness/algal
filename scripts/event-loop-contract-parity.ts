@@ -118,7 +118,7 @@ export async function eventLoopVectors(): Promise<Vector[]> {
   // Valid mutations are fully reidentified and redigested before both parsers
   // see them. Missing keys intentionally stop before identity hashing.
   function fieldVector(name: string, mutate: (root: Record<string, JsonValue>, entry: Record<string, JsonValue>) => void,
-                       expected?: string, reidentify = true): void {
+                       expected?: string, reidentify = true, redigest = false): void {
     const root = structuredClone(fixture.base);
     const entry = (root.entries as Record<string, JsonValue>[])[0]!;
     root.entries = [entry];
@@ -127,6 +127,8 @@ export async function eventLoopVectors(): Promise<Vector[]> {
       entry.eventDigest = hash({behavior: root.behavior!, actor: root.actor!, source: entry.source!,
         sequence: entry.sequence!, type: entry.type!, payload: entry.payload!});
       entry.messageDigest = hash({event: entry.eventDigest, target: root.actor!, delivery: entry.delivery!});
+    }
+    if (reidentify || redigest) {
       const {digest: _prior, ...body} = root;
       root.digest = hash(body);
     }
@@ -147,6 +149,56 @@ export async function eventLoopVectors(): Promise<Vector[]> {
   fieldVector("limits-missing", (root) => { delete (root.limits as Record<string, JsonValue>).maxEventBytes; }, "EVENT_LOOP_PARSE", false);
   fieldVector("root-extra", (root) => { root.createdAt = 0; }, "EVENT_LOOP_UNKNOWN_KEY", false);
   fieldVector("root-missing", (root) => { delete root.actor; }, "EVENT_LOOP_PARSE", false);
+
+  // Missing required fields have distinct probes. Rehash every root digest
+  // that remains present so a stale digest cannot mask a field refusal.
+  for (const field of ["contract", "behavior", "limits", "entries", "digest"] as const) {
+    fieldVector(`root-${field}-missing`, (root) => { delete root[field]; }, "EVENT_LOOP_PARSE", false, field !== "digest");
+  }
+  for (const field of ["maxStateBytes", "maxOutputEvents", "maxTransitionFuel", "maxMailboxDepth"] as const) {
+    fieldVector(`limits-${field}-missing`, (root) => {
+      delete (root.limits as Record<string, JsonValue>)[field];
+    }, "EVENT_LOOP_PARSE", false, true);
+  }
+  for (const field of ["payload", "eventDigest", "messageDigest", "depthBefore", "decision"] as const) {
+    fieldVector(`entry-${field}-missing`, (_root, entry) => { delete entry[field]; }, "EVENT_LOOP_PARSE", false, true);
+  }
+
+  // Four valid, redigested prefixes isolate accepted, duplicate, backpressure,
+  // and failed decisions. Each omission gets its own digest after deletion, so
+  // a stale root digest cannot masquerade as rejection of the missing field.
+  const decisionFields = [
+    {kind: "accepted", source: fixture.base, index: 0, paths: [
+      ["kind"], ["transition"], ["outcome"], ["stateDigest"], ["outputs"], ["effects"], ["resources"],
+      ["effects", "requested"], ["effects", "settled"], ["effects", "receipts"],
+      ["resources", "fuel"], ["resources", "stateBytes"], ["resources", "outputEvents"],
+    ]},
+    {kind: "duplicate", source: fixture.base, index: 1, paths: [["kind"]]},
+    {kind: "backpressure", source: fixture.base, index: 2, paths: [["policy"], ["reason"]]},
+    {kind: "failed", source: fixture.failed, index: 1, paths: [
+      ["reason"], ["transition"], ["stateDigest"], ["resources"],
+      ["resources", "fuel"], ["resources", "stateBytes"], ["resources", "outputEvents"],
+    ]},
+  ] as const;
+  for (const {kind, source, index, paths} of decisionFields) {
+    const control = structuredClone(source);
+    control.entries = (control.entries as JsonValue[]).slice(0, index + 1);
+    const {digest: _prior, ...controlBody} = control;
+    control.digest = hash(controlBody);
+    vectors.push({name: `decision-${kind}-control`, value: control, expected: control.digest});
+    for (const path of paths) {
+      const root = structuredClone(control);
+      let target = ((root.entries as Record<string, JsonValue>[])[index]!.decision) as Record<string, JsonValue>;
+      for (const key of path.slice(0, -1)) target = target[key] as Record<string, JsonValue>;
+      delete target[path.at(-1)!];
+      const {digest: _beforeOmission, ...body} = root;
+      root.digest = hash(body);
+      // Without kind the other accepted keys are unknown to the choice row.
+      const code = kind === "accepted" && path.length === 1 && path[0] === "kind"
+        ? "EVENT_LOOP_UNKNOWN_KEY" : "EVENT_LOOP_PARSE";
+      vectors.push({name: `decision-${kind}-${path.join("-")}-missing`, value: root, expected: code});
+    }
+  }
   return vectors;
 }
 
