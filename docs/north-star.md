@@ -608,6 +608,24 @@ The useful lessons are narrow:
   ship a machine-readable diagnostic protocol and editor-facing check command
   before it grows a large syntax.
 
+- **Compile-time resource bounds:** [Goose](lineage.md#goose-bounds-the-compiler-proves)
+  proves its memory layout before a program runs. ALGAL's expression grammar
+  already admits no unbounded loop, so a static upper bound on fuel and
+  intermediate bytes can be derived before admission and carried on the
+  program interface; the runtime fuel and byte checks remain authoritative.
+  Candidate experiment: compute the bound for every expression in the
+  repository's fixtures and recorded foundry runs, and compare it with observed
+  fuel and peak bytes. Adopt it only if the bound is sound on every case and
+  within 10x of observed use on most, so admission and budgets gain a usable
+  a priori cost.
+- **Verified compact storage:** Goose's position-independent, offset-linked
+  values load with one verification pass. Canonical JSON stays ALGAL's identity
+  and grammar. Candidate experiment: measure load time and bytes for large
+  stored payloads and history pages in canonical JSON against a derived binary
+  form that is verified on load and must round-trip to the same digest. Adopt
+  it only where the saving is measured on replay or history hot paths and
+  repays the second codec's maintenance cost.
+
 These references inform the plan. They do not require adopting a research
 language, a general effect calculus, a global incremental compiler or a new
 runtime dependency.
