@@ -114,15 +114,15 @@ match accepted outcomes and declared notification *counts*, and reject
 unmatched decisions must identify the declared initial state and its canonical
 byte length. An accepted `continue` or `quiet` rule with no state writes must
 also keep the previous state digest and byte size, even after another rule
-commits. They validate the declarations needed for this join: event and actor
-ids, the selected actor's state and transitions, references, result kinds,
-expression envelopes and field limits. A behavior value has at most 1,048,576
-canonical UTF-8 bytes, 32 nested value levels, 1,024 elements per list, 256 keys
-per object, and 65,536 UTF-8 bytes per string or key. The behavior's event list
-has 1 to 128 entries, actors 1 to 64, transitions for the selected actor 1 to
-256, and fields and writes at most 64. Each declared expression envelope has at
-most 16,384 canonical UTF-8 bytes. The join checks only envelope shape, not
-expression grammar or evaluation.
+commits. They check the declared state and transitions of **every actor**,
+including unselected actors: field types and initial values, references,
+result kinds, expression envelopes, and list and byte limits. A behavior value
+has at most 1,048,576 canonical UTF-8 bytes, 32 nested value levels, 1,024
+elements per list, 256 keys per object, and 65,536 UTF-8 bytes per string or key.
+The behavior's event list has 1 to 128 entries, actors 1 to 64, transitions per
+actor 1 to 256, and fields and writes at most 64. Each declared expression
+envelope has at most 16,384 canonical UTF-8 bytes. The join checks only
+envelope shape, not expression grammar or evaluation.
 
 The returned six-field static summary counts declared events, transitions,
 state writes, notifications, deferrals, and escalations for the selected actor

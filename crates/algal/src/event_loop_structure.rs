@@ -248,12 +248,12 @@ pub fn verify_event_loop_trace_structure(
     for event in list(&behavior["events"], 1, 128)? {
         closed(event, &["id", "payload"])?;
         let name = id(&event["id"])?;
-        if events
-            .insert(name.to_owned(), schema(&event["payload"], false)?)
-            .is_some()
-        {
+        // Match the reference join: a repeated event id refuses before the
+        // duplicate declaration's (possibly malformed) payload is inspected.
+        if events.contains_key(name) {
             return Err(error("EVENT_LOOP_ID"));
         }
+        events.insert(name.to_owned(), schema(&event["payload"], false)?);
     }
     let mut actors = BTreeMap::new();
     for actor in list(&behavior["actors"], 1, 64)? {
@@ -365,6 +365,92 @@ pub fn verify_event_loop_trace_structure(
             },
         );
         summary.transitions += 1;
+    }
+    // The root digest also covers actors the trace does not select. Validate
+    // their declarations, but keep the returned counts scoped to this actor.
+    for (actor_id, actor) in &actors {
+        if actor_id.as_str() == id(&trace["actor"])? {
+            continue;
+        }
+        let fields = schema(&actor["state"], true)?;
+        let mut sibling_initial = Map::new();
+        for field in list(&actor["state"]["fields"], 0, 64)? {
+            sibling_initial.insert(id(&field["name"])?.to_owned(), field["initial"].clone());
+        }
+        if canonical(&Value::Object(sibling_initial))
+            .map_err(|_| error("EVENT_LOOP_BOUNDS"))?
+            .len() as u64
+            > number(&behavior["limits"]["maxStateBytes"], 1, 262_144)?
+        {
+            return Err(error("EVENT_LOOP_BOUNDS"));
+        }
+        let mut names = BTreeSet::new();
+        for rule in list(&actor["transitions"], 1, 256)? {
+            closed(rule, &["id", "on", "when", "writes", "outputs", "result"])?;
+            if !names.insert(id(&rule["id"])?) {
+                return Err(error("EVENT_LOOP_ID"));
+            }
+            if !events.contains_key(id(&rule["on"])?) {
+                return Err(error("EVENT_LOOP_REFERENCE"));
+            }
+            if !rule["when"].is_null() {
+                expression(&rule["when"])?;
+            }
+            let mut written = BTreeSet::new();
+            for write in list(&rule["writes"], 0, 64)? {
+                closed(write, &["path", "value"])?;
+                let path = list(&write["path"], 1, 1)?;
+                let field = id(&path[0])?;
+                if !fields.contains_key(field) {
+                    return Err(error("EVENT_LOOP_REFERENCE"));
+                }
+                if !written.insert(field) {
+                    return Err(error("EVENT_LOOP_SEMANTIC"));
+                }
+                expression(&write["value"])?;
+            }
+            let outputs = list(
+                &rule["outputs"],
+                0,
+                number(&behavior["limits"]["maxOutputEvents"], 0, 64)? as usize,
+            )?;
+            for output in outputs {
+                closed(output, &["kind", "target", "event", "payload"])?;
+                if output["kind"] != "notify" {
+                    return Err(error("EVENT_LOOP_SEMANTIC"));
+                }
+                let target = id(&output["target"])?;
+                if target != "self" && !actors.contains_key(target) {
+                    return Err(error("EVENT_LOOP_REFERENCE"));
+                }
+                if !events.contains_key(id(&output["event"])?) {
+                    return Err(error("EVENT_LOOP_REFERENCE"));
+                }
+                expression(&output["payload"])?;
+            }
+            let outcome = rule["result"]["kind"].as_str().unwrap_or("");
+            closed(
+                &rule["result"],
+                match outcome {
+                    "defer" => &["kind", "key"],
+                    "escalate" => &["kind", "request"],
+                    _ => &["kind"],
+                },
+            )?;
+            if !["continue", "quiet", "defer", "escalate"].contains(&outcome)
+                || outcome != "continue" && !outputs.is_empty()
+                || ["defer", "escalate"].contains(&outcome)
+                    && !list(&rule["writes"], 0, 64)?.is_empty()
+            {
+                return Err(error("EVENT_LOOP_SEMANTIC"));
+            }
+            if outcome == "defer" {
+                expression(&rule["result"]["key"])?;
+            }
+            if outcome == "escalate" {
+                expression(&rule["result"]["request"])?;
+            }
+        }
     }
     let mut committed = false;
     let mut last_digest = initial_digest.clone();

@@ -215,6 +215,57 @@ export function verifyEventLoopTraceStructure(trace: unknown, behaviorValue: unk
     transitions.set(name, {on, result: outcome as string, outputs: outputs.length, writes: written.size, unconditional: rule.when === null});
     staticSummary.transitions++;
   }
+  // The digest covers every actor, so an unchecked sibling could smuggle an
+  // invalid declaration into an otherwise valid trace. Keep the returned
+  // counts selected-actor-only; check all other declarations before joining.
+  // Visit siblings by id, not input order, so competing errors have the same
+  // first refusal in the TypeScript and Rust mirrors.
+  for (const [actorId, actor] of [...actors].sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)) {
+    if (actorId === checked.actor) continue;
+    const fields = schema(actor.state, true);
+    const siblingInitial: Record<string, JsonValue> = Object.create(null) as Record<string, JsonValue>;
+    for (const field of list(row(actor.state, ["kind", "fields"]).fields, 0, 64)) {
+      const item = row(field, ["name", "type", "initial"]);
+      siblingInitial[id(item.name)] = item.initial;
+    }
+    if (size(canonicalize(siblingInitial)) > integer(limits.maxStateBytes, 1, 262_144)) fail("EVENT_LOOP_BOUNDS");
+    const names = new Map<string, true>();
+    for (const transition of list(actor.transitions, 1, 256)) {
+      const rule = row(transition, ["id", "on", "when", "writes", "outputs", "result"]);
+      const name = id(rule.id);
+      unique(names, name);
+      names.set(name, true);
+      if (!events.has(id(rule.on))) fail("EVENT_LOOP_REFERENCE");
+      if (rule.when !== null) expression(rule.when);
+      const written = new Set<string>();
+      for (const write of list(rule.writes, 0, 64)) {
+        const item = row(write, ["path", "value"]);
+        const field = id(list(item.path, 1, 1)[0]!);
+        if (!fields.has(field)) fail("EVENT_LOOP_REFERENCE");
+        if (written.has(field)) fail("EVENT_LOOP_SEMANTIC");
+        written.add(field);
+        expression(item.value);
+      }
+      const outputs = list(rule.outputs, 0, integer(limits.maxOutputEvents, 0, 64));
+      for (const output of outputs) {
+        const item = row(output, ["kind", "target", "event", "payload"]);
+        if (item.kind !== "notify") fail("EVENT_LOOP_SEMANTIC");
+        const target = id(item.target);
+        if (target !== "self" && !actors.has(target)) fail("EVENT_LOOP_REFERENCE");
+        if (!events.has(id(item.event))) fail("EVENT_LOOP_REFERENCE");
+        expression(item.payload);
+      }
+      const shape = rule.result !== null && typeof rule.result === "object" && !Array.isArray(rule.result) ? rule.result as Row : null;
+      const result = row(rule.result, shape?.kind === "defer" ? ["kind", "key"] :
+        shape?.kind === "escalate" ? ["kind", "request"] : ["kind"]);
+      const outcome = result.kind;
+      if (!["continue", "quiet", "defer", "escalate"].includes(outcome as string)) fail("EVENT_LOOP_SEMANTIC");
+      if (outcome !== "continue" && outputs.length) fail("EVENT_LOOP_SEMANTIC");
+      if ((outcome === "defer" || outcome === "escalate") && rule.writes instanceof Array && rule.writes.length) fail("EVENT_LOOP_SEMANTIC");
+      if (outcome === "defer") expression(result.key);
+      if (outcome === "escalate") expression(result.request);
+    }
+  }
   let committed = false;
   let lastDigest = initialDigest;
   let lastBytes = initialBytes;

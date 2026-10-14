@@ -112,6 +112,41 @@ export async function eventLoopVectors(): Promise<Vector[]> {
   const {digest: _aggregateDigest, ...aggregateBody} = aggregate;
   aggregate.digest = hash(aggregateBody);
   vectors.push({name: "summary-aggregate-limits", value: aggregate, expected: aggregate.digest});
+
+  // Isolate one accepted delivery to test each trace identity field without
+  // a later duplicate or backpressure decision obscuring the first refusal.
+  // Valid mutations are fully reidentified and redigested before both parsers
+  // see them. Missing keys intentionally stop before identity hashing.
+  function fieldVector(name: string, mutate: (root: Record<string, JsonValue>, entry: Record<string, JsonValue>) => void,
+                       expected?: string, reidentify = true): void {
+    const root = structuredClone(fixture.base);
+    const entry = (root.entries as Record<string, JsonValue>[])[0]!;
+    root.entries = [entry];
+    mutate(root, entry);
+    if (reidentify) {
+      entry.eventDigest = hash({behavior: root.behavior!, actor: root.actor!, source: entry.source!,
+        sequence: entry.sequence!, type: entry.type!, payload: entry.payload!});
+      entry.messageDigest = hash({event: entry.eventDigest, target: root.actor!, delivery: entry.delivery!});
+      const {digest: _prior, ...body} = root;
+      root.digest = hash(body);
+    }
+    vectors.push({name, value: root, expected: expected ?? root.digest as string});
+  }
+  for (const field of ["source", "type", "delivery"] as const) {
+    fieldVector(`${field}-id-max`, (_root, entry) => { entry[field] = "a".repeat(64); });
+    fieldVector(`${field}-id-excess`, (_root, entry) => { entry[field] = "a".repeat(65); }, "EVENT_LOOP_ID", false);
+    fieldVector(`${field}-id-malformed`, (_root, entry) => { entry[field] = "Invalid"; }, "EVENT_LOOP_ID", false);
+    fieldVector(`${field}-id-missing`, (_root, entry) => { delete entry[field]; }, "EVENT_LOOP_PARSE", false);
+  }
+  fieldVector("sequence-max", (_root, entry) => { entry.sequence = 2_147_483_647; });
+  fieldVector("sequence-excess", (_root, entry) => { entry.sequence = 2_147_483_648; }, "EVENT_LOOP_BOUNDS", false);
+  fieldVector("sequence-malformed", (_root, entry) => { entry.sequence = 0.5; }, "EVENT_LOOP_BOUNDS", false);
+  fieldVector("sequence-missing", (_root, entry) => { delete entry.sequence; }, "EVENT_LOOP_PARSE", false);
+  fieldVector("entry-extra", (_root, entry) => { entry.createdAt = 0; }, "EVENT_LOOP_UNKNOWN_KEY", false);
+  fieldVector("limits-extra", (root) => { (root.limits as Record<string, JsonValue>).timeout = 1; }, "EVENT_LOOP_UNKNOWN_KEY", false);
+  fieldVector("limits-missing", (root) => { delete (root.limits as Record<string, JsonValue>).maxEventBytes; }, "EVENT_LOOP_PARSE", false);
+  fieldVector("root-extra", (root) => { root.createdAt = 0; }, "EVENT_LOOP_UNKNOWN_KEY", false);
+  fieldVector("root-missing", (root) => { delete root.actor; }, "EVENT_LOOP_PARSE", false);
   return vectors;
 }
 
