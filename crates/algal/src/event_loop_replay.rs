@@ -425,7 +425,9 @@ pub fn replay_event_loop_trace(
                 let field = if outcome == "defer" { "key" } else { "request" };
                 let pending = evaluate(&rule["result"][field], &env, &mut fuel, limit)?;
                 // Presence is distinct from value: null is a valid witness.
-                if claim.get("pending") != Some(&pending) {
+                // Compare canonical values, not serde_json number representations:
+                // 1.0 and 1 have one digest and are equal in the Bun reference.
+                if claim.get("pending").map(canonical).transpose()? != Some(canonical(&pending)?) {
                     return Err(error("EVENT_LOOP_SEMANTIC"));
                 }
             }

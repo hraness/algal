@@ -63,6 +63,17 @@ test("deferred and escalated values replay, but do not claim host delivery", () 
   expect(replayEventLoopTrace(trace, model).digest).toBe(trace.digest);
 });
 
+test("numeric pending witness accepts a normalized 1.0 and refuses a different value", () => {
+  const {trace, model} = pending("defer", 1);
+  trace.entries[0].decision.pending = JSON.parse("1.0"); // JavaScript normalizes the spelling to 1.
+  seal(trace);
+  expect(parseEventLoopTrace(trace).digest).toBe(trace.digest);
+  expect(replayEventLoopTrace(trace, model).digest).toBe(trace.digest);
+  trace.entries[0].decision.pending = 2;
+  seal(trace);
+  rejects(trace, model, "EVENT_LOOP_SEMANTIC");
+});
+
 test("pending witness has a separate canonical byte limit and closed outcome shape", () => {
   const {trace, model} = pending("defer", "ticket");
   const boundary = structuredClone(trace);
