@@ -8,7 +8,7 @@ const rows = vectors.flatMap(({name, control, value, expected}) => [
   {name: `control-${name}`, value: control, expected: undefined},
   {name, value, expected},
 ]);
-if (rows.length !== 56 || rows.length > 128) throw new Error("trace field parity input limit changed");
+if (rows.length !== 88 || rows.length > 128) throw new Error("trace field parity input limit changed");
 const typescript = rows.map(({name, value, expected}) => {
   try {
     const result = summarizeEventLoopTrace(value);

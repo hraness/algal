@@ -22,9 +22,10 @@ export type TraceFieldVector = {
 export function traceFieldVectors(): TraceFieldVector[] {
   const vectors: TraceFieldVector[] = [];
   function add(name: string, prefix: "accepted" | "backpressure", change: (value: any) => void,
-               expected?: string, extra?: TraceFieldVector["extra"]): void {
+               expected?: string, extra?: TraceFieldVector["extra"], prepare?: (control: any) => void): void {
     const control = structuredClone(fixture.base);
     control.entries = control.entries.slice(0, prefix === "accepted" ? 1 : 3);
+    prepare?.(control);
     seal(control);
     const value = structuredClone(control);
     change(value);
@@ -75,6 +76,45 @@ export function traceFieldVectors(): TraceFieldVector[] {
       decision.resources.outputEvents = length;
     }, expected);
   }
-  if (vectors.length !== 28) throw new Error("trace field-vector inventory changed");
+
+  // Shape-only probes for the remaining trace cells. Reidentify a changed
+  // payload so the byte refusal cannot be explained by a stale event digest.
+  add("limits-malformed", "accepted", (v) => { v.limits = null; }, "EVENT_LOOP_PARSE");
+  const setPayload = (v: any, padding: string): void => {
+    const entry = v.entries[0];
+    entry.payload = {amount: 1, padding};
+    entry.eventDigest = hash({behavior: v.behavior, actor: v.actor, source: entry.source,
+      sequence: entry.sequence, type: entry.type, payload: entry.payload});
+    entry.messageDigest = hash({event: entry.eventDigest, target: v.actor, delivery: entry.delivery});
+  };
+  const entry = fixture.base.entries[0];
+  const emptyBytes = Buffer.byteLength(canonicalize({source: entry.source, sequence: entry.sequence,
+    type: entry.type, payload: {amount: 1, padding: ""}}));
+  const atLimit = 128 - emptyBytes;
+  if (atLimit < 2) throw new Error("event byte edge fixture exceeds limit");
+  for (const [name, padding] of [["payload-event", "a".repeat(atLimit)],
+    ["payload-event-utf8", "a".repeat(atLimit - 2) + "é"]] as const) {
+    add(`${name}-at-128`, "accepted", (v) => setPayload(v, padding), undefined, undefined,
+      (v) => { v.limits.maxEventBytes = 128; });
+    add(`${name}-at-129`, "accepted", (v) => setPayload(v, padding + "a"), "EVENT_LOOP_BOUNDS", undefined,
+      (v) => { v.limits.maxEventBytes = 128; setPayload(v, padding); });
+  }
+  add("decision-malformed", "accepted", (v) => { v.entries[0].decision = null; }, "EVENT_LOOP_PARSE");
+  add("effects-malformed", "accepted", (v) => { v.entries[0].decision.effects = null; }, "EVENT_LOOP_PARSE");
+  add("resources-malformed", "accepted", (v) => { v.entries[0].decision.resources = null; }, "EVENT_LOOP_PARSE");
+  for (const [count, code] of [[1, "EVENT_LOOP_SEMANTIC"], [64, "EVENT_LOOP_SEMANTIC"],
+    [65, "EVENT_LOOP_BOUNDS"]] as const)
+    add(`effects-requested-${count}`, "accepted", (v) => { v.entries[0].decision.effects.requested = count; }, code);
+  for (const count of [1, 65])
+    add(`effects-settled-${count}`, "accepted", (v) => { v.entries[0].decision.effects.settled = count; }, "EVENT_LOOP_BOUNDS");
+  for (const count of [1, 65])
+    add(`effects-receipts-${count}`, "accepted", (v) => {
+      v.entries[0].decision.effects.receipts = Array(count).fill(v.entries[0].decision.stateDigest);
+    }, "EVENT_LOOP_BOUNDS");
+  add("backpressure-reason-malformed", "backpressure", (v) => {
+    v.entries[2].decision.reason = null;
+  }, "EVENT_LOOP_ID");
+
+  if (vectors.length !== 44) throw new Error("trace field-vector inventory changed");
   return vectors;
 }
