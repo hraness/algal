@@ -47,7 +47,8 @@ for (const [i, vector] of vectors.entries()) {
   }
 }
 const rust = Bun.spawn(["cargo", "run", "-q", "-p", "algal", "--locked", "--example", "event_loop_behavior_parity"], {
-  stdin: "pipe", stdout: "pipe", stderr: "pipe", env: {...process.env, CARGO_TARGET_DIR: `${process.cwd()}/target`},
+  stdin: "pipe", stdout: "pipe", stderr: "pipe", env: {...process.env,
+    CARGO_TARGET_DIR: process.env.CARGO_TARGET_DIR ?? `${process.cwd()}/target`},
 });
 rust.stdin.write(JSON.stringify(vectors.map(({name, actor, behavior}) => ({name, actor, behavior}))));
 rust.stdin.end();

@@ -81,7 +81,7 @@ fn check_expr(expr: &Value, names: &BTreeSet<String>) -> Result<()> {
     algal_expr::check_program(&expr["program"], names).map_err(|err| {
         error(match err.code {
             "EXPR_BOUNDS" => "EVENT_LOOP_BOUNDS",
-            "EXPR_UNKNOWN_NAME" => "EVENT_LOOP_REFERENCE",
+            "EXPR_PATH" => "EVENT_LOOP_REFERENCE",
             _ => "EVENT_LOOP_SEMANTIC",
         })
     })
@@ -278,23 +278,41 @@ pub fn replay_event_loop_trace(
         .collect();
     rules.sort_by(|a, b| a["id"].as_str().cmp(&b["id"].as_str()));
     let names: BTreeSet<String> = ["state", "event"].into_iter().map(str::to_owned).collect();
-    for rule in &rules {
-        check_expr(&rule["when"], &names)?;
-        for write in rule["writes"]
+    // The digest includes all actors. Check their expressions even when the
+    // trace selects only one; otherwise an unused sibling can hide bad code.
+    // Preserve selected-actor-first errors, then sort siblings by id.
+    let mut siblings: Vec<&Value> = behavior["actors"]
+        .as_array()
+        .ok_or_else(|| error("EVENT_LOOP_PARSE"))?
+        .iter()
+        .filter(|candidate| candidate["id"] != trace["actor"])
+        .collect();
+    siblings.sort_by(|a, b| a["id"].as_str().cmp(&b["id"].as_str()));
+    for candidate in std::iter::once(actor).chain(siblings) {
+        let mut checked_rules: Vec<&Value> = candidate["transitions"]
             .as_array()
             .ok_or_else(|| error("EVENT_LOOP_PARSE"))?
-        {
-            check_expr(&write["value"], &names)?;
-        }
-        for output in rule["outputs"]
-            .as_array()
-            .ok_or_else(|| error("EVENT_LOOP_PARSE"))?
-        {
-            check_expr(&output["payload"], &names)?;
-        }
-        for key in ["key", "request"] {
-            if let Some(expr) = rule["result"].get(key) {
-                check_expr(expr, &names)?;
+            .iter()
+            .collect();
+        checked_rules.sort_by(|a, b| a["id"].as_str().cmp(&b["id"].as_str()));
+        for rule in checked_rules {
+            check_expr(&rule["when"], &names)?;
+            for write in rule["writes"]
+                .as_array()
+                .ok_or_else(|| error("EVENT_LOOP_PARSE"))?
+            {
+                check_expr(&write["value"], &names)?;
+            }
+            for output in rule["outputs"]
+                .as_array()
+                .ok_or_else(|| error("EVENT_LOOP_PARSE"))?
+            {
+                check_expr(&output["payload"], &names)?;
+            }
+            for key in ["key", "request"] {
+                if let Some(expr) = rule["result"].get(key) {
+                    check_expr(expr, &names)?;
+                }
             }
         }
     }

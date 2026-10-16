@@ -47,7 +47,8 @@ for (const [start, end] of [[0, 28], [28, 56]] as const) {
     const serialized = JSON.stringify(chunk);
     if (Buffer.byteLength(serialized, "utf8") > 4_194_304) throw new Error(`native input too large: ${example}`);
     const rust = Bun.spawn(["cargo", "run", "-q", "-p", "algal", "--locked", "--example", example], {
-      stdin: "pipe", stdout: "pipe", stderr: "pipe", env: {...process.env, CARGO_TARGET_DIR: `${process.cwd()}/target`},
+      stdin: "pipe", stdout: "pipe", stderr: "pipe", env: {...process.env,
+        CARGO_TARGET_DIR: process.env.CARGO_TARGET_DIR ?? `${process.cwd()}/target`},
     });
     rust.stdin.write(serialized);
     rust.stdin.end();

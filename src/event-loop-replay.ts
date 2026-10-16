@@ -111,15 +111,20 @@ export function replayEventLoopTrace(traceValue: unknown, behaviorValue: unknown
   const types = new Map(actor.state.fields.map((field) => [field.name, field.type]));
   let state: JsonObject = Object.fromEntries(actor.state.fields.map((field) => [field.name, field.initial]));
   const rules = [...actor.transitions].sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
-  // Admission of all reachable expressions is independent of the path taken
-  // by this trace; a malformed dormant rule is not a valid behavior.
-  for (const rule of rules) {
-    for (const expr of [rule.when, ...rule.writes.map((write) => write.value),
-      ...rule.outputs.map((output) => output.payload), rule.result.key, rule.result.request]) {
-      if (expr === null || expr === undefined) continue;
-      const checked = checkProgram(expr.program, ["state", "event"]);
-      if (!checked.ok) fail(checked.err.code === "EXPR_BOUNDS" ? "EVENT_LOOP_BOUNDS" :
-        checked.err.code === "EXPR_UNKNOWN_NAME" ? "EVENT_LOOP_REFERENCE" : "EVENT_LOOP_SEMANTIC");
+  // The artifact digest includes all actors. Check every expression, even in
+  // unselected actors and dormant rules, before trusting a replay of that digest.
+  // Keep selected-actor-first error precedence, then visit siblings by id.
+  const candidates = [actor, ...behavior.actors.filter((item) => item.id !== actor.id)
+    .sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0)];
+  for (const candidate of candidates) {
+    for (const rule of [...candidate.transitions].sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0)) {
+      for (const expr of [rule.when, ...rule.writes.map((write) => write.value),
+        ...rule.outputs.map((output) => output.payload), rule.result.key, rule.result.request]) {
+        if (expr === null || expr === undefined) continue;
+        const checked = checkProgram(expr.program, ["state", "event"]);
+        if (!checked.ok) fail(checked.err.code === "EXPR_BOUNDS" ? "EVENT_LOOP_BOUNDS" :
+          checked.err.code === "EXPR_PATH" ? "EVENT_LOOP_REFERENCE" : "EVENT_LOOP_SEMANTIC");
+      }
     }
   }
   for (const entry of trace.entries) {

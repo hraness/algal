@@ -149,6 +149,37 @@ for (const [kind, original, value] of [
   seal(oversized);
   vectors.push({name:`${kind}-oversized`,trace:oversized,behavior:original.behavior,expected:"EVENT_LOOP_BOUNDS"});
 }
+const numericBehavior = structuredClone(deferred.behavior);
+numericBehavior.actors[0].transitions[0].result.key.program = 1;
+seal(numericBehavior);
+const numericTrace = structuredClone(deferred.trace);
+numericTrace.behavior = numericBehavior.digest;
+identify(numericTrace.entries[0], numericTrace);
+numericTrace.entries[0].decision.pending = 1;
+numericTrace.entries[0].decision.resources.fuel = 10;
+seal(numericTrace);
+vectors.push({name:"defer-number", trace:numericTrace, behavior:numericBehavior, expected:numericTrace.digest});
+const wrongNumber = structuredClone(numericTrace);
+wrongNumber.entries[0].decision.pending = 2;
+seal(wrongNumber);
+vectors.push({name:"defer-number-mismatch", trace:wrongNumber, behavior:numericBehavior, expected:"EVENT_LOOP_SEMANTIC"});
+// Null is a valid evaluated value, but omitting the pending field is not a witness.
+for (const [kind, original] of [["defer", deferred], ["escalate", escalated]] as const) {
+  const proposed = structuredClone(original.behavior);
+  proposed.actors[0].transitions[0].result[kind === "defer" ? "key" : "request"].program = null;
+  seal(proposed);
+  const valid = structuredClone(original.trace);
+  valid.behavior = proposed.digest;
+  identify(valid.entries[0], valid);
+  valid.entries[0].decision.pending = null;
+  valid.entries[0].decision.resources.fuel = 10; // guard 9, null literal 1
+  seal(valid);
+  vectors.push({name:`${kind}-null-witness`, trace:valid, behavior:proposed, expected:valid.digest});
+  const missing = structuredClone(valid);
+  delete missing.entries[0].decision.pending;
+  seal(missing);
+  vectors.push({name:`${kind}-null-omitted`, trace:missing, behavior:proposed, expected:"EVENT_LOOP_SEMANTIC"});
+}
 for (const reason of ["fuel-exhausted", "expression-error", "state-overflow", "output-invalid"] as const) {
   const valid = failureCase(reason);
   vectors.push({name:`failed-${reason}`, ...valid, expected:valid.trace.digest});
@@ -166,7 +197,7 @@ for (const [index, vector] of vectors.entries()) {
 }
 const rust = Bun.spawn(["cargo", "run", "-q", "-p", "algal", "--locked", "--example", "event_loop_replay_parity"], {
   stdin: "pipe", stdout: "pipe", stderr: "pipe", env: {...process.env,
-    CARGO_NET_OFFLINE:process.env.CARGO_NET_OFFLINE ?? "true", CARGO_TARGET_DIR:`${process.cwd()}/target`},
+    CARGO_NET_OFFLINE:process.env.CARGO_NET_OFFLINE ?? "true", CARGO_TARGET_DIR:process.env.CARGO_TARGET_DIR ?? `${process.cwd()}/target`},
 });
 rust.stdin.write(JSON.stringify(vectors.map(({name, trace, behavior}) => ({name, trace, behavior}))));
 rust.stdin.end();

@@ -59,8 +59,21 @@ test("deferred and escalated values replay, but do not claim host delivery", () 
       rejects(wrong, model, "EVENT_LOOP_SEMANTIC");
     }
   }
-  const {trace, model} = pending("defer", null);
-  expect(replayEventLoopTrace(trace, model).digest).toBe(trace.digest);
+});
+
+test("null pending witness is present for both outcomes, unlike an omitted field", () => {
+  for (const kind of ["defer", "escalate"] as const) {
+    const {trace, model} = pending(kind, null);
+    trace.entries[0].decision.resources.fuel = 10; // guard 9, null literal 1
+    seal(trace);
+    expect(parseEventLoopTrace(trace).digest).toBe(trace.digest);
+    expect(replayEventLoopTrace(trace, model).digest).toBe(trace.digest);
+    const missing = structuredClone(trace);
+    delete missing.entries[0].decision.pending;
+    seal(missing);
+    expect(parseEventLoopTrace(missing).digest).toBe(missing.digest);
+    rejects(missing, model, "EVENT_LOOP_SEMANTIC");
+  }
 });
 
 test("numeric pending witness accepts a normalized 1.0 and refuses a different value", () => {
