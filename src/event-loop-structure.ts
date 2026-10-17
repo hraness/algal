@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { canonicalize, type JsonValue } from "./values";
 import { EventLoopContractError, parseEventLoopTrace } from "./event-loop-contract";
+import { snapshotEventLoopValue } from "./event-loop-snapshot";
+export { snapshotEventLoopValue } from "./event-loop-snapshot";
 
 // P1 structural join only. Guards, expression results, output identities, and
 // actual resource use require a separate evaluator/replay check.
@@ -17,51 +19,6 @@ const idPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const digestPattern = /^sha256:[0-9a-f]{64}$/;
 const size = (s: string): number => Buffer.byteLength(s, "utf8");
 
-// Take an inert, bounded copy before hashing or selecting any behavior field.
-// A foreign accessor cannot become part of a validated record.
-export function snapshotEventLoopValue(value: unknown): JsonValue {
-  const active = new Set<object>();
-  function walk(v: unknown, depth: number): JsonValue {
-    if (depth > 32) fail("EVENT_LOOP_BOUNDS");
-    if (v === null || typeof v === "boolean") return v;
-    if (typeof v === "string") { if (size(v) > 65_536) fail("EVENT_LOOP_BOUNDS"); return v; }
-    if (typeof v === "number") { if (!Number.isFinite(v)) fail("EVENT_LOOP_PARSE"); return v; }
-    if (typeof v !== "object" || active.has(v)) fail("EVENT_LOOP_PARSE");
-    if (depth === 32) fail("EVENT_LOOP_BOUNDS");
-    active.add(v);
-    if (Array.isArray(v)) {
-      // A proxy around an array can trap `v.length`; take its data descriptor
-      // instead, just as we do for indexed elements and object properties.
-      const length = Object.getOwnPropertyDescriptor(v, "length")?.value as unknown;
-      if (typeof length !== "number" || !Number.isSafeInteger(length) || length < 0 ||
-          length > 1_024 || Reflect.ownKeys(v).length !== length + 1) fail("EVENT_LOOP_BOUNDS");
-      const copy: JsonValue[] = [];
-      for (let i = 0; i < length; i++) {
-        const descriptor = Object.getOwnPropertyDescriptor(v, i);
-        if (!descriptor?.enumerable || !("value" in descriptor)) fail("EVENT_LOOP_PARSE");
-        copy.push(walk(descriptor.value, depth + 1));
-      }
-      active.delete(v);
-      return copy;
-    }
-    if (Object.getPrototypeOf(v) !== Object.prototype && Object.getPrototypeOf(v) !== null) fail("EVENT_LOOP_PARSE");
-    const keys = Reflect.ownKeys(v);
-    if (keys.length > 256) fail("EVENT_LOOP_BOUNDS");
-    const copy: Record<string, JsonValue> = Object.create(null) as Record<string, JsonValue>;
-    for (const key of keys) {
-      if (typeof key !== "string") fail("EVENT_LOOP_PARSE");
-      if (size(key) > 65_536) fail("EVENT_LOOP_BOUNDS");
-      const descriptor = Object.getOwnPropertyDescriptor(v, key);
-      if (!descriptor?.enumerable || !("value" in descriptor)) fail("EVENT_LOOP_PARSE");
-      copy[key] = walk(descriptor.value, depth + 1);
-    }
-    active.delete(v);
-    return copy;
-  }
-  const copy = walk(value, 0);
-  if (size(canonicalize(copy)) > 1_048_576) fail("EVENT_LOOP_BOUNDS");
-  return copy;
-}
 function row(value: JsonValue, keys: readonly string[]): Row {
   if (value === null || typeof value !== "object" || Array.isArray(value)) fail("EVENT_LOOP_PARSE");
   if (Object.keys(value).some((key) => !keys.includes(key))) fail("EVENT_LOOP_UNKNOWN_KEY");

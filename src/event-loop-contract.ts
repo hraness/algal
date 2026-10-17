@@ -1,16 +1,11 @@
 import { createHash } from "node:crypto";
 import { canonicalize, type JsonValue } from "./values";
+import { EventLoopContractError, type EventLoopCode } from "./event-loop-errors";
+import { snapshotEventLoopValue } from "./event-loop-snapshot";
+export { EventLoopContractError, type EventLoopCode } from "./event-loop-errors";
 
 // P1 trace admission only. A caller must separately check the P0 behavior and
 // replay its expressions before treating a trace as execution evidence.
-export type EventLoopCode =
-  | "EVENT_LOOP_PARSE" | "EVENT_LOOP_CONTRACT" | "EVENT_LOOP_UNKNOWN_KEY"
-  | "EVENT_LOOP_ID" | "EVENT_LOOP_DIGEST" | "EVENT_LOOP_BOUNDS"
-  | "EVENT_LOOP_SCHEMA" | "EVENT_LOOP_REFERENCE" | "EVENT_LOOP_SEMANTIC";
-
-export class EventLoopContractError extends Error {
-  constructor(readonly code: EventLoopCode) { super(code); }
-}
 
 type Row = Record<string, unknown>;
 const bytes = (value: string): number => Buffer.byteLength(value, "utf8");
@@ -107,7 +102,9 @@ function checkedHash(value: unknown, expected: unknown): void {
 
 /** Strict shape/identity parser, not a scheduler, expression evaluator or replay verifier. */
 export function parseEventLoopTrace(value: unknown): { digest: string; entries: number } {
-  const root = row(value, ["contract", "behavior", "actor", "limits", "entries", "digest"]);
+  // A checked descriptor on a foreign object does not freeze a Proxy's next
+  // read. Work only from an inert, bounded snapshot through the digest check.
+  const root = row(snapshotEventLoopValue(value), ["contract", "behavior", "actor", "limits", "entries", "digest"]);
   if (root.contract !== "algal.event-loop.trace.v1") fail("EVENT_LOOP_CONTRACT");
   const behavior = digest(root.behavior);
   const actor = id(root.actor);
