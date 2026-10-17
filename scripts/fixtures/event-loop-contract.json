@@ -1,0 +1,120 @@
+{
+  "base": {
+    "contract": "algal.event-loop.trace.v1",
+    "behavior": "sha256:8c5076158ed2e8a36fe7f86d25f37cce49ac78d50e8fa32abfe40ce111b5f010",
+    "actor": "counter",
+    "limits": { "maxEventBytes": 1024, "maxStateBytes": 16384, "maxOutputEvents": 8, "maxTransitionFuel": 1000, "maxMailboxDepth": 64 },
+    "entries": [
+      {
+        "source": "source-a", "sequence": 0, "type": "increment", "payload": { "amount": 1 }, "delivery": "first",
+        "eventDigest": "sha256:cee7b747f7fb5502360de7668fa4744cff2af803b07ff6929f1107084f300c72",
+        "messageDigest": "sha256:567a7570a35a1b75c3199c5d75bdd3399943605555bb0faf798ee4b99d84cbd4",
+        "depthBefore": 0,
+        "decision": {
+          "kind": "accepted", "transition": "increment", "outcome": "continue",
+          "stateDigest": "sha256:6aea6dfe6561984cdc5c54ead84d47d2cf29e48253ae282aef237404adad4661",
+          "outputs": ["sha256:49d04f7dca7e1c683eac11ddd2a9e314fe264884306a677bee5f7570ec425bef"],
+          "effects": { "requested": 0, "settled": 0, "receipts": [] },
+          "resources": { "fuel": 12, "stateBytes": 11, "outputEvents": 1 }
+        }
+      },
+      {
+        "source": "source-a", "sequence": 0, "type": "increment", "payload": { "amount": 1 }, "delivery": "again",
+        "eventDigest": "sha256:cee7b747f7fb5502360de7668fa4744cff2af803b07ff6929f1107084f300c72",
+        "messageDigest": "sha256:d447e17d8aed3bff4aaa1b88591432bc0af66fd0ccb11023ae6fc8ec21102475",
+        "depthBefore": 0, "decision": { "kind": "duplicate" }
+      },
+      {
+        "source": "source-b", "sequence": 0, "type": "reset", "payload": {}, "delivery": "overflow",
+        "eventDigest": "sha256:c9bbd460f4145d25dbfcc2797180c30597ad763738b28383ce17986e73e480b6",
+        "messageDigest": "sha256:ab64207e24eb6200834a88405cacd47db0b07a2f6554bbf9b850dc38b60d9d70",
+        "depthBefore": 64, "decision": { "kind": "backpressure", "policy": "defer", "reason": "mailbox-full" }
+      },
+      {
+        "source": "source-b", "sequence": 0, "type": "reset", "payload": {}, "delivery": "later",
+        "eventDigest": "sha256:c9bbd460f4145d25dbfcc2797180c30597ad763738b28383ce17986e73e480b6",
+        "messageDigest": "sha256:75d32e309e22f236f9523cdf78d5381cf81121c77e4af18f422751ad895a85a9",
+        "depthBefore": 0,
+        "decision": {
+          "kind": "accepted", "transition": "reset", "outcome": "quiet",
+          "stateDigest": "sha256:618de7d9f46f3f697d827a1b6d84974760d5deda62e4e592adaa3c646602a94c",
+          "outputs": [], "effects": { "requested": 0, "settled": 0, "receipts": [] },
+          "resources": { "fuel": 2, "stateBytes": 11, "outputEvents": 0 }
+        }
+      }
+    ],
+    "digest": "sha256:9024fb596ae880bcc6b484a83c6cb61db984c3e375d85f017880eb0b5bd17d7b"
+  },
+  "failed": {
+    "contract": "algal.event-loop.trace.v1",
+    "behavior": "sha256:8c5076158ed2e8a36fe7f86d25f37cce49ac78d50e8fa32abfe40ce111b5f010",
+    "actor": "counter",
+    "limits": { "maxEventBytes": 1024, "maxStateBytes": 16384, "maxOutputEvents": 8, "maxTransitionFuel": 1000, "maxMailboxDepth": 64 },
+    "entries": [
+      {
+        "source": "source-a", "sequence": 0, "type": "increment", "payload": { "amount": 1 }, "delivery": "first",
+        "eventDigest": "sha256:cee7b747f7fb5502360de7668fa4744cff2af803b07ff6929f1107084f300c72",
+        "messageDigest": "sha256:567a7570a35a1b75c3199c5d75bdd3399943605555bb0faf798ee4b99d84cbd4",
+        "depthBefore": 0,
+        "decision": {
+          "kind": "accepted", "transition": "increment", "outcome": "continue",
+          "stateDigest": "sha256:6aea6dfe6561984cdc5c54ead84d47d2cf29e48253ae282aef237404adad4661",
+          "outputs": ["sha256:49d04f7dca7e1c683eac11ddd2a9e314fe264884306a677bee5f7570ec425bef"],
+          "effects": { "requested": 0, "settled": 0, "receipts": [] },
+          "resources": { "fuel": 12, "stateBytes": 11, "outputEvents": 1 }
+        }
+      },
+      {
+        "source": "source-c", "sequence": 0, "type": "increment", "payload": { "amount": 2 }, "delivery": "failed-first",
+        "eventDigest": "sha256:11f4c33607267cdf7b0d9441f00c95373d490876348741edee942589ae583a14",
+        "messageDigest": "sha256:67ed73aa8fce1dd43219a7804dccd5121ed3957557d19ef6ce449f4e99e3d4f8",
+        "depthBefore": 0,
+        "decision": {
+          "kind": "failed", "reason": "fuel-exhausted", "transition": null,
+          "stateDigest": "sha256:6aea6dfe6561984cdc5c54ead84d47d2cf29e48253ae282aef237404adad4661",
+          "resources": { "fuel": 1000, "stateBytes": 11, "outputEvents": 0 }
+        }
+      },
+      {
+        "source": "source-c", "sequence": 0, "type": "increment", "payload": { "amount": 2 }, "delivery": "failed-again",
+        "eventDigest": "sha256:11f4c33607267cdf7b0d9441f00c95373d490876348741edee942589ae583a14",
+        "messageDigest": "sha256:d52ec22607beb9116e61d5aa6beac97509d59dfa817898f91f566b2c515c3df0",
+        "depthBefore": 0, "decision": { "kind": "duplicate" }
+      }
+    ],
+    "digest": "sha256:6f599182e967efa4233aeceea619a272a489143a69e4df12345798f6ebe124b6"
+  },
+  "invalid": [
+    { "name": "root-digest", "path": "/digest", "value": "sha256:0000000000000000000000000000000000000000000000000000000000000000", "code": "EVENT_LOOP_DIGEST" },
+    { "name": "bad-contract", "path": "/contract", "value": "algal.event-loop.trace.v2", "code": "EVENT_LOOP_CONTRACT" },
+    { "name": "unknown-time", "path": "/entries/1/decision/createdAt", "value": 0, "code": "EVENT_LOOP_UNKNOWN_KEY" },
+    { "name": "bad-event-hash", "path": "/entries/0/eventDigest", "value": "sha256:0000000000000000000000000000000000000000000000000000000000000000", "code": "EVENT_LOOP_DIGEST" },
+    { "name": "bad-message-hash", "path": "/entries/0/messageDigest", "value": "sha256:0000000000000000000000000000000000000000000000000000000000000000", "code": "EVENT_LOOP_DIGEST" },
+    { "name": "conflicting-redelivery", "path": "/entries/1/payload/amount", "value": 2, "reidentify": true, "code": "EVENT_LOOP_ID" },
+    { "name": "duplicate-without-binding", "path": "/entries/0/decision", "value": { "kind": "duplicate" }, "code": "EVENT_LOOP_SEMANTIC" },
+    { "name": "accept-full", "path": "/entries/0/depthBefore", "value": 64, "code": "EVENT_LOOP_SEMANTIC" },
+    { "name": "backpressure-not-full", "path": "/entries/2/depthBefore", "value": 63, "code": "EVENT_LOOP_SEMANTIC" },
+    { "name": "missing-receipt", "path": "/entries/0/decision/effects/settled", "value": 1, "code": "EVENT_LOOP_BOUNDS" },
+    { "name": "pure-transition-effect", "path": "/entries/0/decision/effects/requested", "value": 1, "code": "EVENT_LOOP_SEMANTIC" },
+    { "name": "quiet-transition-effect", "path": "/entries/3/decision/effects/requested", "value": 1, "code": "EVENT_LOOP_SEMANTIC" },
+    { "name": "resource-output-mismatch", "path": "/entries/0/decision/resources/outputEvents", "value": 0, "code": "EVENT_LOOP_SEMANTIC" },
+    { "name": "quiet-with-output", "path": "/entries/0/decision/outcome", "value": "quiet", "code": "EVENT_LOOP_SEMANTIC" },
+    { "name": "no-transition-with-id", "path": "/entries/3/decision/outcome", "value": "no-transition", "code": "EVENT_LOOP_SEMANTIC" },
+    { "name": "pending-with-effect", "path": "/entries/0/decision/outcome", "value": "defer", "code": "EVENT_LOOP_SEMANTIC" },
+    { "name": "fuel-over-budget", "path": "/entries/0/decision/resources/fuel", "value": 1001, "code": "EVENT_LOOP_BOUNDS" },
+    { "name": "sequence-overflow", "path": "/entries/0/sequence", "value": 2147483648, "code": "EVENT_LOOP_BOUNDS" },
+    { "name": "event-byte-limit", "path": "/limits/maxEventBytes", "value": 1, "code": "EVENT_LOOP_BOUNDS" },
+    { "name": "invalid-policy", "path": "/entries/2/decision/policy", "value": "ignore", "code": "EVENT_LOOP_SEMANTIC" }
+  ],
+  "invalidFailed": [
+    { "name": "failed-unknown-reason", "path": "/entries/1/decision/reason", "value": "timeout", "code": "EVENT_LOOP_SEMANTIC" },
+    { "name": "failed-changed-state", "path": "/entries/1/decision/stateDigest", "value": "sha256:0000000000000000000000000000000000000000000000000000000000000000", "code": "EVENT_LOOP_SEMANTIC" },
+    { "name": "failed-changed-state-bytes", "path": "/entries/1/decision/resources/stateBytes", "value": 10, "code": "EVENT_LOOP_SEMANTIC" },
+    { "name": "failed-output", "path": "/entries/1/decision/resources/outputEvents", "value": 1, "code": "EVENT_LOOP_SEMANTIC" },
+    { "name": "failed-over-fuel", "path": "/entries/1/decision/resources/fuel", "value": 1001, "code": "EVENT_LOOP_BOUNDS" },
+    { "name": "failed-full", "path": "/entries/1/depthBefore", "value": 64, "code": "EVENT_LOOP_SEMANTIC" },
+    { "name": "failed-invalid-transition", "path": "/entries/1/decision/transition", "value": "Bad", "code": "EVENT_LOOP_ID" },
+    { "name": "failed-unknown-effect", "path": "/entries/1/decision/effects", "value": {}, "code": "EVENT_LOOP_UNKNOWN_KEY" },
+    { "name": "failed-redelivery-conflict", "path": "/entries/2/payload/amount", "value": 3, "reidentify": true, "code": "EVENT_LOOP_ID" }
+  ]
+}

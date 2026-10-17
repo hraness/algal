@@ -38,6 +38,12 @@ pub mod demo;
 pub mod effects;
 pub mod embeddings;
 pub mod error;
+pub mod event_loop_behavior;
+pub mod event_loop_contract;
+#[cfg(test)]
+mod event_loop_contract_tests;
+pub mod event_loop_replay;
+pub mod event_loop_structure;
 pub mod foundry;
 pub mod graph;
 pub mod habitat_budget;
