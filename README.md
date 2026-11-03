@@ -1,5 +1,9 @@
 # ALGAL
 
+**Retirement notice · 2026-11-03:** ALGAL development and hosted services are
+ending. Published artifacts and this repository’s history are kept for
+reference. The material below documents the project before retirement.
+
 > 🌱 ALGAL is a programming language for agents that run for weeks. A program is
 > data the host can inspect and run; it pauses for an approval, resumes after a
 > restart, and replays from recorded effects. Programs evolve by proposing,
